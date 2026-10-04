@@ -9,13 +9,13 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
   const [error,setError] = useState(''), [busy,setBusy] = useState(false);
   const [question,setQuestion] = useState('What should I check next for this task?');
   const [answer,setAnswer] = useState(null), [deepError,setDeepError] = useState('');
-  const [target,setTarget] = useState('');
+  const [target,setTarget] = useState(''), [file,setFile] = useState(null);
   const generation = useRef(0);
   const mounted = useRef(true);
   useEffect(()=>{mounted.current=true;return ()=>{mounted.current=false;};},[]);
   useEffect(()=>{
     const lease=++generation.current, controller=new AbortController();
-    setSnapshot(null);setContext(null);setAnswer(null);setError('');setDeepError('');setBusy(false);
+    setSnapshot(null);setContext(null);setAnswer(null);setFile(null);setError('');setDeepError('');setBusy(false);
     if(!project.hosted)return ()=>controller.abort();
     hostRequest('/api/project',{projectId:project.id},controller.signal).then(value=>{if(generation.current===lease)setSnapshot(value);}).catch(e=>{if(e.name!=='AbortError'&&generation.current===lease)setError(e.message);});
     hostRequest('/api/context',{projectId:project.id},controller.signal).then(value=>{if(generation.current===lease)setContext(value);}).catch(e=>{if(e.name!=='AbortError'&&generation.current===lease)setContext({unavailable:e.message});});
@@ -40,6 +40,7 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
       if(mounted.current&&generation.current===lease){setSnapshot(next);setTarget('');}
     }catch(e){if(generation.current===lease)setError(e.message);}
   };
+  const openFile=async path=>{const lease=generation.current;setFile(null);try{const value=await hostRequest('/api/file',{projectId:project.id,target:path,snapshotDigest:snapshot.snapshotDigest});if(mounted.current&&generation.current===lease)setFile(value);}catch(e){if(generation.current===lease)setError(e.message);}};
   const deeper=async(mode='with-context', regenerate=false)=>{
     const lease=++generation.current;
     setBusy(true);setDeepError('');setAnswer(null);
@@ -55,8 +56,9 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
       {error&&<p role="status" className="observatory-error">{error}</p>}
       {snapshot&&<><p className="muted-copy">{snapshot.files?.length||0} bounded local files · presence is not qualified completion.</p>
         {(snapshot.analysis?.warnings||[]).map((warning,i)=><p key={i} className="muted-copy">{warning}</p>)}
-        {bindings.map((link,i)=><div className="link-candidate" key={`b${i}`}><strong>{link.target}</strong><small>Confirmed · {link.kind} · {link.freshness||'revalidate against current source'}</small>{(snapshot.bindings||[]).filter(other=>other.target===link.target&&other.taskId!==task.id).map(other=><button key={`${other.planPath}:${other.taskId}`} onClick={()=>onNavigate(other.planPath,other.taskId)}>{other.taskId} · {other.planPath}</button>)}</div>)}
-        {proposals.map((link,i)=><div className="link-candidate" key={`s${i}`}><strong>{link.target}</strong><small>Proposed {link.kind} · {link.reason}</small><div className="link-actions"><button onClick={()=>bind(link,'confirm')}>Confirm link</button><button onClick={()=>bind(link,'dismiss')}>Dismiss</button></div></div>)}
+        {bindings.map((link,i)=><div className="link-candidate" key={`b${i}`}><button className="source-link" onClick={()=>openFile(link.target)}>{link.target}</button><small>Confirmed · {link.kind} · {link.freshness||'revalidate against current source'}</small>{(snapshot.bindings||[]).filter(other=>other.target===link.target&&other.taskId!==task.id).map(other=><button key={`${other.planPath}:${other.taskId}`} onClick={()=>onNavigate(other.planPath,other.taskId)}>{other.taskId} · {other.planPath}</button>)}</div>)}
+        {proposals.map((link,i)=><div className="link-candidate" key={`s${i}`}><button className="source-link" onClick={()=>openFile(link.target)}>{link.target}</button><small>Proposed {link.kind} · {link.reason}</small><div className="link-actions"><button onClick={()=>bind(link,'confirm')}>Confirm link</button><button onClick={()=>bind(link,'dismiss')}>Dismiss</button></div></div>)}
+        {file&&<div className="source-preview"><strong>{file.path} · read only</strong><small>{file.sha256}</small><pre>{file.body}</pre>{file.truncated&&<p>Preview truncated.</p>}{(file.bindings||[]).map(other=><button key={`${other.planPath}:${other.taskId}`} onClick={()=>onNavigate(other.planPath,other.taskId)}>{other.taskId} · {other.planPath}</button>)}</div>}
         {!proposals.length&&!bindings.length&&<p className="muted-copy">No local match proposed. Add a repository-relative link below.</p>}
         <label className="observatory-label">Manual file or test link<input value={target} onChange={e=>setTarget(e.target.value)} placeholder="src/example.go"/></label><button disabled={!target.trim()} onClick={()=>bind({target:target.trim(),kind:/(test|spec)/i.test(target)?'test':'file'},'manual')}>Confirm manual link</button>
       </>}
