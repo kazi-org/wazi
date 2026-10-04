@@ -120,3 +120,12 @@ The coordinator initial audit-only probe altered a check instead of the review
 and was invalid as a counterexample; independent review confirmed audit-only
 review proof is already rejected. Tracked separate fix/verify/re-review tasks; frozen0.0.1 bytes remain
 unchanged and merge waits for corrected conformance and independent review.
+
+G2 fix7b41e78 delegates proof selection to the same qualifying-evidence binding
+as the satisfied gate and scans for a qualifying proof. Added mixed/order and
+wrong task/attempt/revision/policy/head/base tests without frozen fixture edits.
+CI37184831031 passed public8693d3d. Offline artifact SHA256
+f26d7731a0b4f9662dedb7d007ee375236c7dc8f7f3cff9393cf9d0aab59695e
+rejects the actual wrong-subject review probe (exit2/independence_missing), where
+the prior binary returned valid. All60 frozen fixtures and legitimate current
+attested review still pass; wrong digest fails closed. Final re-review/merge wait.
