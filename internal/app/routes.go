@@ -229,6 +229,8 @@ func replyError(w http.ResponseWriter, status int, message string) {
 }
 func safeDeepError(err error) string {
 	switch {
+	case errors.Is(err, deep.ErrProviderUnavailable):
+		return "OpenRouter is not enabled. No provider request was made."
 	case errors.Is(err, deep.ErrUnknownOutcome):
 		return "Previous provider outcome is uncertain. It will not be resent automatically. Inspect the receipt or explicitly regenerate."
 	case errors.Is(err, deep.ErrInProgress):
