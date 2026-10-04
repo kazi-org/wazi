@@ -58,6 +58,8 @@ final class HostSupervisor {
     var onFailure: (() -> Void)?
 
     private let resources: DesktopResources
+    private let startupTimeout: TimeInterval
+    private let shutdownGrace: TimeInterval
     private var state: State = .idle
     private var process: Process?
     private var stdinPipe: Pipe?
@@ -70,7 +72,17 @@ final class HostSupervisor {
     private var shutdownTimer: DispatchWorkItem?
     private var stopCompletions: [() -> Void] = []
 
-    init(resources: DesktopResources) { self.resources = resources }
+    var hasOwnedProcess: Bool { process != nil }
+
+    init(
+        resources: DesktopResources,
+        startupTimeout: TimeInterval = DesktopContract.startupTimeout,
+        shutdownGrace: TimeInterval = DesktopContract.shutdownGrace
+    ) {
+        self.resources = resources
+        self.startupTimeout = startupTimeout
+        self.shutdownGrace = shutdownGrace
+    }
 
     func start() {
         guard state == .idle else { return }
@@ -130,7 +142,7 @@ final class HostSupervisor {
             self.failAndStop()
         }
         startupTimer = timeout
-        DispatchQueue.main.asyncAfter(deadline: .now() + DesktopContract.startupTimeout, execute: timeout)
+        DispatchQueue.main.asyncAfter(deadline: .now() + startupTimeout, execute: timeout)
     }
 
     func stop(completion: @escaping () -> Void) {
@@ -157,7 +169,7 @@ final class HostSupervisor {
             }
         }
         shutdownTimer = timer
-        DispatchQueue.main.asyncAfter(deadline: .now() + DesktopContract.shutdownGrace, execute: timer)
+        DispatchQueue.main.asyncAfter(deadline: .now() + shutdownGrace, execute: timer)
         if !child.isRunning { childTerminated(child, generation: generation) }
     }
 
