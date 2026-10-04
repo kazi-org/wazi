@@ -38,7 +38,7 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
   const bind=async(link,action)=>{
     const lease=generation.current;setError('');
     try{
-      await hostRequest('/api/bindings',{...selection,target:link.target,kind:link.kind||'code',basisDigest:link.basisDigest||snapshot.snapshotDigest,sidecarDigest:snapshot.sidecarDigest,action});
+      await hostRequest('/api/bindings',{...selection,target:link.target,kind:link.kind||'code',basisDigest:action==='revoke'?snapshot.snapshotDigest:(link.basisDigest||snapshot.snapshotDigest),sidecarDigest:snapshot.sidecarDigest,action});
       const next=await hostRequest('/api/project',{projectId:project.id});
       if(mounted.current&&generation.current===lease){setSnapshot(next);setTarget('');}
     }catch(e){if(generation.current===lease)setError(e.message);}
