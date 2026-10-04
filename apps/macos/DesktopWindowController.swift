@@ -66,6 +66,10 @@ final class DesktopWindowController: NSWindowController, NSWindowDelegate, WKNav
         view.setAccessibilityLabel("Wazi observatory")
         webView = view
         setContent(view)
+        if let window = view.window {
+            window.makeFirstResponder(view)
+            window.displayIfNeeded()
+        }
         view.load(URLRequest(url: origin.appendingPathComponent("")))
     }
 
