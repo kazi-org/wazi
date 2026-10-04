@@ -112,8 +112,20 @@ func cloneBundle(b Bundle) Bundle {
 	sections := make(map[SectionName]Section, len(b.Sections))
 	for k, v := range b.Sections {
 		v.Records = append([]Record(nil), v.Records...)
+		for i := range v.Records {
+			v.Records[i].SourceURI = cloneString(v.Records[i].SourceURI)
+			v.Records[i].Attribution = cloneString(v.Records[i].Attribution)
+		}
 		sections[k] = v
 	}
 	b.Sections = sections
 	return b
+}
+
+func cloneString(v *string) *string {
+	if v == nil {
+		return nil
+	}
+	copyValue := *v
+	return &copyValue
 }

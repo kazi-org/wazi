@@ -115,6 +115,9 @@ func TestReadAcceptsMappedTypedFixtureAndRejectsScopeEscape(t *testing.T) {
 	if got := b.Sections[Facts].Records[0].Kind; got != Fact {
 		t.Fatalf("record kind = %q", got)
 	}
+	if !b.ValidTo.Equal(b.Sections[Facts].Records[0].ExpiresAt) {
+		t.Fatalf("bundle lease %s exceeds earliest record expiry %s", b.ValidTo, b.Sections[Facts].Records[0].ExpiresAt)
+	}
 	r.read = func(_ context.Context, scope Scope, _ Limits) (Bundle, error) {
 		now := time.Now()
 		sections := map[SectionName]Section{}

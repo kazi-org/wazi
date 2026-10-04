@@ -75,6 +75,13 @@ func (s *Service) Read(ctx context.Context, repositoryID string) (Bundle, error)
 	if !b.ValidTo.IsZero() && b.ValidTo.Before(leaseEnd) {
 		leaseEnd = b.ValidTo
 	}
+	for _, section := range b.Sections {
+		for _, record := range section.Records {
+			if record.ExpiresAt.Before(leaseEnd) {
+				leaseEnd = record.ExpiresAt
+			}
+		}
+	}
 	b.ValidTo = leaseEnd
 	return b, nil
 }
