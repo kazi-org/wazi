@@ -53,3 +53,7 @@ Contract [mac-contract-v1.md](../desktop/mac-contract-v1.md) is frozen. Baseline
 ### Accepted implementation finding E8-S01
 
 Independent preliminary review at f34bb61328f99f0fe2c50c28de8e5c7b037ba030 found the incorrect WKScriptMessageHandler callback. Hosted run37236018216 reproduced the compile failure. Corrected in eba30e2 (worker f228390); T8.15-T8.17 track correction, verification and independent re-review. Preliminary shutdown/font concerns were withdrawn after exact-object rereading; neither is represented as an accepted defect.
+
+### Build correction E8-P01
+
+Hosted run37236144843 compiled Swift but rejected the manifest hash for Apple-generated `_CodeSignature/CodeResources`. Signing the main executable inside an app can create that bundle signature before final sealing. Exclude signature metadata and the root executable from content hashes; `codesign --verify --deep --strict` verifies both after final assembly. Other resource hashes remain checked. T8.11 and T8.12 require rerun and independent review of this correction.
