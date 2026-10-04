@@ -82,7 +82,8 @@ enum DesktopSupervisorHarness {
 
     private static func writeMockHost(scenario: Scenario, to url: URL) throws {
         let mode = scenario.rawValue
-        let script = #"#!/bin/sh
+        let script = #"""
+#!/bin/sh
 nonce=
 data=
 while [ "$#" -gt 0 ]; do
@@ -109,7 +110,7 @@ if [ "$mode" = validStop ]; then
   while IFS= read -r ignored; do :; done
   printf eof > "$data/eof"
 fi
-"#.replacingOccurrences(of: "MODE", with: mode)
+"""#.replacingOccurrences(of: "MODE", with: mode)
         try script.write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
     }
