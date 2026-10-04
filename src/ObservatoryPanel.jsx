@@ -18,7 +18,7 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
     ++fileGeneration.current;deepController.current?.controller.abort();
     setSnapshot(null);setContext(null);setAnswer(null);setFile(null);setSaved([]);setError('');setDeepError('');setBusy(false);
     if(!project.hosted)return ()=>controller.abort();
-    hostRequest('/api/project',{projectId:project.id},controller.signal).then(value=>{if(generation.current===lease)setSnapshot(value);}).catch(e=>{if(e.name!=='AbortError'&&generation.current===lease)setError(e.message);});
+    hostRequest('/api/project',{projectId:project.id},controller.signal).then(value=>{if(plan.sourceDigest&&value.planDigests?.[plan.path]!==plan.sourceDigest)throw new Error('The source plan changed. Refresh local projects before reviewing links or requesting analysis.');if(generation.current===lease)setSnapshot(value);}).catch(e=>{if(e.name!=='AbortError'&&generation.current===lease)setError(e.message);});
     hostRequest('/api/context',{projectId:project.id},controller.signal).then(value=>{if(generation.current===lease)setContext(value);}).catch(e=>{if(e.name!=='AbortError'&&generation.current===lease)setContext({unavailable:e.message});});
     hostRequest('/api/deep/list',{projectId:project.id},controller.signal).then(value=>{if(generation.current===lease)setSaved(value.results||[]);}).catch(()=>{});
     return ()=>{controller.abort();};
@@ -49,7 +49,7 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
     deepController.current={controller,mode};
     setBusy(true);setDeepError('');setAnswer(null);
     try{
-      const result=await hostRequest('/api/deep/answer',{...selection,question,contextMode:mode,regenerate,snapshotDigest:snapshot.snapshotDigest,contextLease:context?.leaseId},controller.signal);
+      const result=await hostRequest('/api/deep/answer',{...selection,question,contextMode:mode,regenerate,snapshotDigest:snapshot.snapshotDigest,planDigest:plan.sourceDigest,contextLease:context?.leaseId},controller.signal);
       if(mounted.current&&generation.current===lease)setAnswer(result);
     }catch(e){if(generation.current===lease)setDeepError(e.name==='AbortError'?'Cancelled locally. No automatic resend will occur; inspect the receipt to establish provider outcome.':e.message);}
     finally{if(deepController.current?.controller===controller)deepController.current=null;if(mounted.current&&generation.current===lease)setBusy(false);}

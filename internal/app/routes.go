@@ -32,6 +32,7 @@ type lease struct {
 type selection struct {
 	ProjectID      string `json:"projectId"`
 	PlanPath       string `json:"planPath"`
+	PlanDigest     string `json:"planDigest"`
 	TaskID         string `json:"taskId"`
 	SnapshotDigest string `json:"snapshotDigest"`
 	ContextLease   string `json:"contextLease"`
@@ -135,6 +136,10 @@ func (a *Routes) Handle(w http.ResponseWriter, r *http.Request) bool {
 		coherent, err := a.Observatory.ResolveTask(snapshot, input.PlanPath, input.TaskID)
 		if err != nil {
 			replyError(w, 409, "Task source is stale or ambiguous. Refresh before sending.")
+			return true
+		}
+		if strings.TrimPrefix(input.PlanDigest, "sha256:") != hash(coherent.RawPlan) {
+			replyError(w, 409, "The displayed plan changed. Refresh local projects before requesting analysis.")
 			return true
 		}
 		manifest := deep.Manifest{RepositoryID: snapshot.RepositoryID, TaskRef: input.PlanPath + "#" + input.TaskID, Question: strings.TrimSpace(input.Question), PlanBody: coherent.RawPlan, PlanDigest: hash(coherent.RawPlan), CodeDigest: snapshot.SnapshotDigest, PromptVersion: "wazi.observatory.v1", AnalyzerVersion: "wazi.local.v1", Model: deep.Model, Settings: json.RawMessage(`{"max_tokens":2048,"temperature":0.2}`), ContextMode: deep.ContextPlanCode}
