@@ -4,6 +4,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { parsePlan, scanPlans } from '../scripts/plans.mjs';
+import { laneFor } from '../src/demo.mjs';
+import { looksLikePortableJson, portablePlanFromBundle, PORTABLE_CONTRACT_DIGEST, PORTABLE_CONTRACT_VERSION } from '../src/portable-plan.mjs';
 
 test('parsePlan extracts skill checkbox fields, epics and stable source identity', () => {
   const markdown = `# E2 — Build the observatory
@@ -111,6 +113,90 @@ test('acceptance brackets preserve apostrophes in ordinary prose', () => {
   const parsed = parsePlan(`# Acceptance
 - [ ] T1.1 Check user's task acc: [The user's task remains visible and its status is clear.]`, { path: 'plan.md' });
   assert.equal(parsed.tasks[0].acceptance, "The user's task remains visible and its status is clear.");
+});
+
+test('preserves contract metadata, unsupported stages, UUID identity and authored status separately', () => {
+  const uuid = '3f6f6e8a-46b0-4f05-9854-4d7e8f4d16cc';
+  const authoredId = uuid.toUpperCase();
+  const sourceBlock = `- [x] ${authoredId} Inspect portable evidence  kind: agent stage: rereview provider: aprl canonical-id: ${uuid} policy-revision: review-v2 custom-hint: keep this\n  Acceptance: First criterion.\n    Second criterion stays on its own line.`;
+  const [task] = parsePlan(sourceBlock, { path: 'docs/plan.md', project: 'repo' }).tasks;
+
+  assert.equal(task.sourceId, authoredId);
+  assert.equal(task.canonicalId, uuid);
+  assert.equal(task.authoredStatus, 'checked');
+  assert.equal(task.status, 'complete');
+  assert.equal(task.stage, 'rereview');
+  assert.equal(task.metadata.provider, 'aprl');
+  assert.equal(task.metadata['policy-revision'], 'review-v2');
+  assert.match(task.sourceBlock, /custom-hint: keep this/);
+  assert.equal(task.acceptance, 'First criterion.\nSecond criterion stays on its own line.');
+  assert.equal(laneFor(task), 'other');
+});
+
+test('keeps punctuation and opaque multiline acceptance intact beside metadata', () => {
+  const [task] = parsePlan(`# Opaque acceptance
+- [ ] T7.3 Preserve criteria  stage: implement
+  Acceptance: A sentence with punctuation.
+    A second line with: authored wording.
+  provider: local`, { path: 'docs/plan.md' }).tasks;
+  assert.equal(task.acceptance, 'A sentence with punctuation.\nA second line with: authored wording.');
+});
+
+test('projects frozen portable v0.0.1 without trusting reported qualification or losing source data', async () => {
+  const bundle = JSON.parse(await fs.readFile(new URL('./fixtures/portable-display.json', import.meta.url), 'utf8'));
+  const manifest = JSON.parse(await fs.readFile(new URL('../contracts/plan/v0/manifest.json', import.meta.url), 'utf8'));
+  const project = portablePlanFromBundle(bundle, 'portable-display.json');
+  const [plan] = project.plans;
+  const [task] = plan.tasks;
+
+  assert.equal(PORTABLE_CONTRACT_VERSION, '0.0.1');
+  assert.equal(PORTABLE_CONTRACT_DIGEST, 'sha256:7582512f122d2f2a9c4461facc7541c9887053f137260d6ebe9c6dea611d039d');
+  assert.equal(manifest.contractDigest, PORTABLE_CONTRACT_DIGEST);
+  assert.equal(plan.id, bundle.definition.id);
+  assert.equal(task.id, bundle.definition.tasks[0].id);
+  assert.equal(task.stage, 'rereview');
+  assert.equal(laneFor(task), 'other');
+  assert.equal(task.authoredStatus, 'pending');
+  assert.equal(task.authoredStatusLabel, 'pending');
+  assert.equal(task.status, 'pending');
+  assert.equal(task.acceptance, bundle.definition.tasks[0].acceptance);
+  assert.deepEqual(task.source, bundle.definition.tasks[0].source);
+  assert.deepEqual(task.metadata, bundle.definition.tasks[0].metadata);
+  assert.equal(project.portableBundle, bundle);
+  assert.equal(task.reportedEvidence[0].trust, 'verified');
+  assert.equal(task.reportedEvaluations[0].qualification, 'verified');
+  assert.match(plan.warnings.join(' '), /unverified by Wazi/i);
+  const authoredComplete = structuredClone(bundle);
+  authoredComplete.definition.tasks[0].authoredStatus = 'complete';
+  const [completeTask] = portablePlanFromBundle(authoredComplete).plans[0].tasks;
+  assert.equal(completeTask.status, 'complete');
+  assert.equal(completeTask.authoredStatusLabel, 'Marked done');
+  assert.equal(looksLikePortableJson('  {"contractVersion":"0.0.1"}'), true);
+  assert.equal(looksLikePortableJson('# markdown'), false);
+});
+
+test('accepts every frozen valid contract fixture for display projection', async () => {
+  const fixtureDirectory = new URL('../contracts/plan/v0/fixtures/valid/', import.meta.url);
+  const names = await fs.readdir(fixtureDirectory);
+  for (const name of names.filter((entry) => entry.endsWith('.json'))) {
+    const bundle = JSON.parse(await fs.readFile(new URL(name, fixtureDirectory), 'utf8'));
+    assert.doesNotThrow(() => portablePlanFromBundle(bundle, name), name);
+  }
+});
+
+test('rejects unsupported versions and malformed portable core shapes', async () => {
+  const fixture = JSON.parse(await fs.readFile(new URL('./fixtures/portable-display.json', import.meta.url), 'utf8'));
+  assert.throws(() => portablePlanFromBundle({ ...fixture, contractVersion: '0.0.2' }), /Unsupported portable plan contract version/);
+  assert.throws(() => portablePlanFromBundle({ ...fixture, extra: true }), /not defined by contract/);
+  const missingAcceptance = structuredClone(fixture);
+  delete missingAcceptance.definition.tasks[0].acceptance;
+  assert.throws(() => portablePlanFromBundle(missingAcceptance), /acceptance is required/);
+  const missingMapping = structuredClone(fixture);
+  delete missingMapping.definition.tasks[0].source.line;
+  assert.throws(() => portablePlanFromBundle(missingMapping), /line is required for Markdown/);
+  const wrongRef = structuredClone(fixture);
+  wrongRef.definition.tasks[0].source.ref = 'other.md';
+  assert.throws(() => portablePlanFromBundle(wrongRef), /must match the plan source ref/);
 });
 
 test('scanner stops at git roots and does not invent projects for docs directories', async (t) => {

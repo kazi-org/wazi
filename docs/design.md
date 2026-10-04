@@ -43,3 +43,20 @@ Wazi stewardship of the shared schema/semantic validator/conformance fixtures re
 The browser starts with a 66 px icon-only project rail and a 42 px task-inspector rail on desktop. Each panel expands independently; the project panel restores names, counts and search. Project and utility icons retain accessible labels, native hover titles and hover/focus label treatment. Closing the inspector preserves the selected task, and selecting a task opens its details. The inspector rail is hidden while details are expanded, so it reserves no extra width. Panel state is local to the current page session.
 
 At 1278 px viewport width, the compact scene occupies 1170 px (about 92%); expanding both panels leaves 771 px. The existing ResizeObserver adjusts the canvas and camera aspect. Memoized task arrays keep scene data stable across panel toggles. Resize initializes the camera home once, then preserves its orbit and zoom while updating aspect; explicit reset and project navigation still restore the home view. Below the existing breakpoints, navigation remains a drawer and details an overlay controlled from the top bar. Closed mobile navigation is hidden from focus and accessibility navigation. The open workspace drawer moves and traps keyboard focus, makes the scene/details inert and restores focus to its opening control on close.
+
+## Experimental portable contract implementation
+
+[ADR 0002](adr/0002-experimental-portable-plan-contract.md) records the newly
+assigned bounded stewardship. `contracts/plan/v0` contains separate structural
+projections and normative semantics for definition, execution and evidence/
+requirement judgments; `manifest.json` pins the frozen schema/fixture bytes. The
+Go library and CLI validate shape/coherence offline and never authenticate receipt
+claims or authorize dispatch. Browser import is a read-only consumer: preserve
+metadata, raw source and stage tokens while showing producer-reported judgments
+as unverified. Markdown checkboxes remain authored completion assertions.
+
+Unsupported stages have an explicit Other presentation lane, rather than an
+implementation fallback. Core typed dependency predicates are never inferred
+from the visual lane. Local Markdown discovery remains the existing Node/Vite
+prototype; this package is not the future Go-host migration or an implementation
+of ADR 0001's provider/context/cache gates.

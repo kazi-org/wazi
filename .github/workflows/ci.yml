@@ -1,0 +1,45 @@
+name: Contract and observatory checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test ./...
+      - run: go run ./cmd/wazi-contract fixtures --contract-digest sha256:7582512f122d2f2a9c4461facc7541c9887053f137260d6ebe9c6dea611d039d
+      - name: Build Mac offline verifier
+        run: GOOS=darwin GOARCH=arm64 go build -o artifacts/wazi-contract-darwin-arm64 ./cmd/wazi-contract
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: offline-verifier-darwin-arm64
+          path: artifacts/wazi-contract-darwin-arm64
+          retention-days: 3
+  observatory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: mrdoob/three.js
+          ref: 1ea31f304854ee3c85df39fdb3eaec584bba6d9b
+          path: .artifacts/three
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run build
+        env:
+          THREE_JS_SOURCE: ${{ github.workspace }}/.artifacts/three

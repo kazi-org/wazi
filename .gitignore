@@ -9,3 +9,4 @@ ajent.social
 
 .env.local
 .env.*.local
+artifacts/

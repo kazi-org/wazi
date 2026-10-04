@@ -29,6 +29,7 @@ export const lanes = [
   { id:'verify', title:'Verify', subtitle:'Prove it works', color:'#69cfe5' },
   { id:'review', title:'Review', subtitle:'A second perspective', color:'#d4a0de' },
   { id:'land', title:'Land', subtitle:'Bring it together', color:'#ecbc85' },
+  { id:'other', title:'Other', subtitle:'Unsupported or unstaged', color:'#9aa6b2' },
 ];
-export const laneFor = task => ['merge','verify-landed'].includes(task.stage) ? 'land' : ['preflight','implement','verify','review'].includes(task.stage) ? task.stage : 'implement';
+export const laneFor = task => ['merge','verify-landed'].includes(task.stage) ? 'land' : ['preflight','implement','verify','review'].includes(task.stage) ? task.stage : 'other';
 export const statusLabel = {complete:'Complete',active:'In progress',blocked:'Blocked',pending:'Planned'};
