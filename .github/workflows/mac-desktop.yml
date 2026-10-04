@@ -41,6 +41,7 @@ jobs:
           python3 packaging/desktop/verify_bundle.py .artifacts/Wazi.app
           test "$(uname -m)" = arm64
           .artifacts/Wazi.app/Contents/MacOS/Wazi --self-test
+          .artifacts/Wazi.app/Contents/MacOS/Wazi --supervisor-test
       - name: Archive development-only application
         run: ditto -c -k --sequesterRsrc --keepParent .artifacts/Wazi.app .artifacts/Wazi-mac-arm64.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
