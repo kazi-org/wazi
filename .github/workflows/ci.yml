@@ -15,14 +15,17 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - run: go test ./...
+      - run: go test -race ./... -timeout 120s
+      - run: go vet ./...
       - run: go run ./cmd/wazi-contract fixtures --contract-digest sha256:7582512f122d2f2a9c4461facc7541c9887053f137260d6ebe9c6dea611d039d
       - name: Build Mac offline verifier
         run: GOOS=darwin GOARCH=arm64 go build -o artifacts/wazi-contract-darwin-arm64 ./cmd/wazi-contract
+      - name: Build Mac local observatory host
+        run: GOOS=darwin GOARCH=arm64 go build -o artifacts/wazi-darwin-arm64 ./cmd/wazi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: offline-verifier-darwin-arm64
-          path: artifacts/wazi-contract-darwin-arm64
+          path: artifacts/*-darwin-arm64
           retention-days: 3
   observatory:
     runs-on: ubuntu-latest

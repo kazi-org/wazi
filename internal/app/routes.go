@@ -198,7 +198,7 @@ func (a *Routes) Handle(w http.ResponseWriter, r *http.Request) bool {
 			replyError(w, 503, "Private analysis storage unavailable.")
 			return true
 		}
-		result, err := a.Deep.InspectForRepository(ctx, input.Key, snapshot.RepositoryID)
+		result, err := a.Deep.InspectHistoricalForRepository(ctx, input.Key, snapshot.RepositoryID)
 		if err != nil {
 			replyError(w, 409, safeDeepError(err))
 			return true
