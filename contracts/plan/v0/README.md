@@ -43,8 +43,14 @@ and success assertions are illustrative; no live result is claimed.
 
 ## Versioning and compatibility
 
-0.0.1 is frozen at local specification revision `16b66e5`; repository delivery and
-Go conformance receipts are recorded separately in the project devlog. Do not
+0.0.1 is frozen at public specification revision
+`f04497a3fcde3c1b78d09b683405d4d9f7645efc` on
+[`contract/experimental-0.0.1`](https://github.com/kazi-org/wazi/tree/f04497a3fcde3c1b78d09b683405d4d9f7645efc/contracts/plan/v0).
+Its normative bytes match the original local freeze `16b66e5`. Consumers pin the
+exact revision and manifest digest; this specification branch contains the
+schemas, semantics and fixtures, while the Go implementation lives on the
+reviewed delivery branch/main. Repository delivery and Go conformance receipts
+are recorded separately in the project devlog. Do not
 mutate a frozen schema/semantic/fixture file under the same version. Any change to
 those bytes requires a new experimental version and digest; consumers opt in
 explicitly. There is no stable-v1 compatibility promise or release publication.

@@ -333,7 +333,7 @@ func semanticValidate(document any, result *Result) {
 			add("qualifying_evidence_missing", p+"/evidenceIds", "satisfied evaluation requires at least one qualifying evidence item of the predicate's kind")
 		}
 		if predicate == "independent-approved" {
-			checkIndependence(ids, referenced, p, add)
+			checkIndependence(ids, referenced, req, evaluation, snapshot, exec, p, add)
 		}
 		if predicate == "deployment-verified" {
 			approvalID := str(get(evaluation, "approvalEvidenceId"))
@@ -432,12 +432,15 @@ func kindMatches(predicate, kind string) bool {
 	return want[predicate] == kind
 }
 
-func checkIndependence(ids []string, referenced map[string]any, path string, add func(string, string, string)) {
+func checkIndependence(ids []string, referenced map[string]any, requirement, evaluation, snapshot, execution any, path string, add func(string, string, string)) {
+	currentReview := false
+	var proofFailure *Finding
 	for _, id := range ids {
 		item := referenced[id]
-		if item == nil || str(get(item, "kind")) != "review" || str(get(item, "result")) != "passed" || str(get(item, "trust")) != "verified" || truth(get(item, "auditOnly")) {
+		if item == nil || str(get(item, "kind")) != "review" || !qualifyingEvidence(item, requirement, evaluation, snapshot, execution) {
 			continue
 		}
+		currentReview = true
 		ind := get(item, "independence")
 		mode := str(get(ind, "mode"))
 		verifier := str(get(item, "verifier"))
@@ -445,23 +448,35 @@ func checkIndependence(ids []string, referenced map[string]any, path string, add
 		switch mode {
 		case "contributors":
 			if len(contributors) == 0 || contains(contributors, verifier) {
-				add("independence_contributors_invalid", path+"/evidenceIds", "contributors independence needs nonempty contributors excluding the verifier")
+				rememberProofFailure(&proofFailure, "independence_contributors_invalid", path+"/evidenceIds", "contributors independence needs nonempty contributors excluding the verifier")
+				continue
 			}
 			return
 		case "authority-attestation":
 			if str(get(ind, "authority")) == "" || str(get(ind, "provenance")) == "" || contains(contributors, verifier) {
-				add("independence_attestation_invalid", path+"/evidenceIds", "authority attestation needs named authority and provenance and must exclude the verifier when listed")
+				rememberProofFailure(&proofFailure, "independence_attestation_invalid", path+"/evidenceIds", "authority attestation needs named authority and provenance and must exclude the verifier when listed")
+				continue
 			}
 			return
 		case "singular":
-			add("independence_singular", path+"/evidenceIds", "singular mode cannot establish all-contributor independence")
-			return
+			rememberProofFailure(&proofFailure, "independence_singular", path+"/evidenceIds", "singular mode cannot establish all-contributor independence")
 		default:
-			add("independence_missing", path+"/evidenceIds", "independent approval requires explicit independence evidence")
-			return
+			rememberProofFailure(&proofFailure, "independence_missing", path+"/evidenceIds", "independent approval requires explicit independence evidence on the current review")
 		}
 	}
-	add("independence_review_missing", path+"/evidenceIds", "independent approval requires qualifying review evidence")
+	if proofFailure != nil {
+		add(proofFailure.Code, proofFailure.Path, proofFailure.Message)
+	} else if currentReview {
+		add("independence_missing", path+"/evidenceIds", "independent approval requires explicit independence evidence on the current review")
+	} else {
+		add("independence_review_missing", path+"/evidenceIds", "independent approval requires a current, qualifying review with independence proof")
+	}
+}
+
+func rememberProofFailure(target **Finding, code, path, message string) {
+	if *target == nil {
+		*target = &Finding{Code: code, Path: path, Message: message}
+	}
 }
 
 func checkCycles(graph map[string][]string, index map[string]int, add func(string, string, string)) {
