@@ -81,7 +81,7 @@ def assemble(repo, output, host, shell, assets, cache, sign=True):
         p.chmod(0o755)
         if sign:
             subprocess.run(['codesign', '--force', '--sign', '-', str(p)], check=True, capture_output=True)
-    manifest = {'format': 'wazi-mac-bundle/1', 'architecture': 'arm64', 'deploymentTarget': '14.0', 'signing': 'ad-hoc-development' if sign else 'unsigned-development', 'node': {'version': NODE_VERSION, 'archiveSHA256': NODE_SHA256}, 'sourceRevision': subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip(), 'rootExecutableIntegrity': 'codesign verifies the root executable; its signature is finalized after manifest creation', 'files': {str(p.relative_to(output)): digest(p) for p in sorted(output.rglob('*')) if p.is_file() and p != contents / 'MacOS/Wazi'}}
+    manifest = {'format': 'wazi-mac-bundle/1', 'architecture': 'arm64', 'deploymentTarget': '14.0', 'signing': 'ad-hoc-development' if sign else 'unsigned-development', 'node': {'version': NODE_VERSION, 'archiveSHA256': NODE_SHA256}, 'sourceRevision': subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip(), 'rootExecutableIntegrity': 'codesign verifies the root executable; its signature is finalized after manifest creation', 'files': {str(p.relative_to(output)): digest(p) for p in sorted(output.rglob('*')) if p.is_file() and p != contents / 'MacOS/Wazi' and '_CodeSignature' not in p.relative_to(output).parts}}
     (resources / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     if sign:
         subprocess.run(['codesign', '--force', '--sign', '-', str(output)], check=True, capture_output=True)
