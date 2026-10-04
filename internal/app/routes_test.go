@@ -76,7 +76,7 @@ func TestSelectionAndUnavailableContextNeverDispatchModel(t *testing.T) {
 	if contextResponse.Code != 200 || !strings.Contains(contextResponse.Body.String(), "unavailable") {
 		t.Fatalf("context: %d %s", contextResponse.Code, contextResponse.Body.String())
 	}
-	request := selection{ProjectID: snapshot.ProjectID, PlanPath: "docs/plan.md", TaskID: "T1.1", SnapshotDigest: snapshot.SnapshotDigest, Question: "Next check?", ContextMode: "with-context"}
+	request := selection{ProjectID: snapshot.ProjectID, PlanPath: "docs/plan.md", TaskID: "T1.1", SnapshotDigest: snapshot.SnapshotDigest, PlanDigest: snapshot.PlanDigests["docs/plan.md"], Question: "Next check?", ContextMode: "with-context"}
 	response := send(t, app, "/api/deep/answer", request)
 	if response.Code != 409 {
 		t.Fatalf("expected unavailable context rejection, got %d: %s", response.Code, response.Body.String())

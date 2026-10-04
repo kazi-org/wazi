@@ -129,15 +129,16 @@ type File struct {
 	SHA256 string `json:"sha256"`
 }
 type Snapshot struct {
-	ProjectID      string       `json:"projectId"`
-	RepositoryID   string       `json:"repositoryId"`
-	PlanDigest     string       `json:"planDigest"`
-	SnapshotDigest string       `json:"snapshotDigest"`
-	Files          []File       `json:"files"`
-	Suggestions    []Suggestion `json:"suggestions"`
-	Bindings       []Binding    `json:"bindings"`
-	SidecarDigest  string       `json:"sidecarDigest"`
-	Warnings       []string     `json:"warnings"`
+	ProjectID      string            `json:"projectId"`
+	RepositoryID   string            `json:"repositoryId"`
+	PlanDigest     string            `json:"planDigest"`
+	PlanDigests    map[string]string `json:"planDigests"`
+	SnapshotDigest string            `json:"snapshotDigest"`
+	Files          []File            `json:"files"`
+	Suggestions    []Suggestion      `json:"suggestions"`
+	Bindings       []Binding         `json:"bindings"`
+	SidecarDigest  string            `json:"sidecarDigest"`
+	Warnings       []string          `json:"warnings"`
 }
 type Source struct {
 	Path   string `json:"path"`
@@ -423,6 +424,10 @@ func (s *Service) Snapshot(ctx context.Context, id string) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	snap.PlanDigest = planDigest
+	snap.PlanDigests = map[string]string{}
+	for _, plan := range p.Plans {
+		snap.PlanDigests[plan.Path] = plan.SourceDigest
+	}
 	files, warns := s.scanFiles(root)
 	snap.Files = files
 	snap.Warnings = append(snap.Warnings, warns...)
