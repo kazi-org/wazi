@@ -2,6 +2,7 @@ package observatory
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -223,6 +224,47 @@ func TestTaskIdentityAndBindingsRefreshAfterPlanEdit(t *testing.T) {
 	}
 	if b, err := os.ReadFile(filepath.Join(dataDir, "repositories.json")); err != nil || string(b) != "[]" {
 		t.Fatalf("corrupt registry changed: %q %v", b, err)
+	}
+}
+
+func TestSnapshotRejectsPlanEditedAfterParserRead(t *testing.T) {
+	root := t.TempDir()
+	repo := filepath.Join(root, "project")
+	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	planPath := filepath.Join(repo, "docs", "plan.md")
+	parsedBytes := []byte("# Race plan\n\n- [ ] T1.1 Parsed task\n")
+	changedBytes := []byte("# Race plan\n\n- [ ] T1.2 Changed task\n")
+	if err := os.WriteFile(planPath, parsedBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node is unavailable")
+	}
+	original, err := filepath.Abs(filepath.Join("..", "..", "scripts", "host-bridge.mjs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrapper := filepath.Join(root, "race-bridge.mjs")
+	cache := filepath.Join(root, "bridge-cache.json")
+	script := fmt.Sprintf(`import {spawnSync} from 'node:child_process'; import fs from 'node:fs'; const cache=%q; if(fs.existsSync(cache)){process.stdout.write(fs.readFileSync(cache));}else{const r=spawnSync('node',[%q,process.argv[2]],{encoding:'utf8'});if(r.status!==0)process.exit(r.status||1);fs.writeFileSync(cache,r.stdout);process.stdout.write(r.stdout);fs.writeFileSync(%q,%q);}`, cache, original, planPath, string(changedBytes))
+	if err := os.WriteFile(wrapper, []byte(script), 0600); err != nil {
+		t.Fatal(err)
+	}
+	svc := New(root, filepath.Join(t.TempDir(), "app-data"), "node", wrapper)
+	scan, err := svc.Discover(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scan.Projects) != 1 {
+		t.Fatalf("discovered projects: %d", len(scan.Projects))
+	}
+	if _, err := svc.Snapshot(context.Background(), scan.Projects[0].ID); err == nil || !strings.Contains(err.Error(), "changed after its task graph was parsed") {
+		t.Fatalf("snapshot accepted a mixed parser/source view: %v", err)
 	}
 }
 

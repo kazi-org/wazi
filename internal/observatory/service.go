@@ -28,11 +28,37 @@ type Task struct {
 	SourceBlock string `json:"sourceBlock"`
 }
 type Plan struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Path  string `json:"path"`
-	Tasks []Task `json:"tasks"`
+	ID           string `json:"id"`
+	Title        string `json:"title"`
+	Path         string `json:"path"`
+	SourceDigest string `json:"sourceDigest"`
+	Tasks        []Task `json:"tasks"`
 }
+type planVersion struct {
+	Path   string `json:"path"`
+	Digest string `json:"digest"`
+}
+
+func planManifestDigest(plans []Plan, root string) (string, error) {
+	manifest := make([]planVersion, 0, len(plans))
+	for _, plan := range plans {
+		b, err := safeRead(root, plan.Path, 1<<20)
+		if err != nil {
+			return "", err
+		}
+		actual := digest(b)
+		if plan.SourceDigest == "" || actual != plan.SourceDigest {
+			return "", fmt.Errorf("plan %s changed after its task graph was parsed", plan.Path)
+		}
+		manifest = append(manifest, planVersion{Path: filepath.ToSlash(plan.Path), Digest: actual})
+	}
+	b, err := json.Marshal(manifest)
+	if err != nil {
+		return "", err
+	}
+	return digest(b), nil
+}
+
 type Project struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
@@ -391,16 +417,11 @@ func (s *Service) Snapshot(ctx context.Context, id string) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	snap := Snapshot{ProjectID: id, RepositoryID: repoID, Warnings: []string{}}
-	var pb bytes.Buffer
-	for _, plan := range p.Plans {
-		b, e := safeRead(root, plan.Path, 1<<20)
-		if e != nil {
-			snap.Warnings = append(snap.Warnings, "Plan changed or became unavailable: "+plan.Path)
-			continue
-		}
-		pb.Write(b)
+	planDigest, err := planManifestDigest(p.Plans, root)
+	if err != nil {
+		return Snapshot{}, err
 	}
-	snap.PlanDigest = digest(pb.Bytes())
+	snap.PlanDigest = planDigest
 	files, warns := s.scanFiles(root)
 	snap.Files = files
 	snap.Warnings = append(snap.Warnings, warns...)
@@ -678,15 +699,8 @@ func (s *Service) WriteBinding(id, planPath, taskID, target, kind, basis, expect
 	if e != nil || digest(currentTarget) != targetDigest {
 		return Snapshot{}, errors.New("target changed since analysis; refresh and review again")
 	}
-	var currentPlans bytes.Buffer
-	for _, plan := range p.Plans {
-		b, re := safeRead(root, plan.Path, 1<<20)
-		if re != nil {
-			return Snapshot{}, errors.New("plan changed since analysis; refresh and review again")
-		}
-		currentPlans.Write(b)
-	}
-	if digest(currentPlans.Bytes()) != current.PlanDigest {
+	planDigest, re := planManifestDigest(p.Plans, root)
+	if re != nil || planDigest != current.PlanDigest {
 		return Snapshot{}, errors.New("plan changed since analysis; refresh and review again")
 	}
 	stable := false
@@ -712,7 +726,7 @@ func (s *Service) WriteBinding(id, planPath, taskID, target, kind, basis, expect
 	if action != "confirm" && action != "manual" && action != "dismiss" {
 		return Snapshot{}, errors.New("invalid action")
 	}
-	planDigest := current.PlanDigest
+	planDigest = current.PlanDigest
 	analyzer := AnalyzerVersion
 	if action == "manual" {
 		analyzer = "manual-link-v1"
@@ -793,6 +807,9 @@ func (s *Service) ResolveTask(snapshot Snapshot, planPath, taskID string) (Coher
 	raw, e := safeRead(root, planPath, 1<<20)
 	if e != nil {
 		return CoherentSnapshot{}, e
+	}
+	if digest(raw) != plan.SourceDigest {
+		return CoherentSnapshot{}, errors.New("plan changed after task resolution; refresh before using this task")
 	}
 	out := CoherentSnapshot{Snapshot: snapshot, Plan: *plan, RawPlan: string(raw), Sources: []Source{}}
 	for _, b := range snapshot.Bindings {

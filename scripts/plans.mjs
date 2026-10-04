@@ -135,9 +135,12 @@ export async function scanPlans({ root = path.join(os.homedir(), 'Code'), repoMa
           warnings.push(`Skipped oversized plan ${name}/${relative} (limit ${MAX_FILE_BYTES} bytes).`);
           continue;
         }
-        const markdown = await fs.readFile(file, 'utf8');
+        const sourceBytes = await fs.readFile(file);
+        const markdown = sourceBytes.toString('utf8');
         // Pass a project-qualified path into the shared parser to keep IDs unique across repos.
-        plans.push(parsePlan(markdown, { path: `${path.resolve(repo.path)}/${relative}`, project: name }));
+        const parsed = parsePlan(markdown, { path: `${path.resolve(repo.path)}/${relative}`, project: name });
+        parsed.sourceDigest = `sha256:${createHash('sha256').update(sourceBytes).digest('hex')}`;
+        plans.push(parsed);
         plans.at(-1).path = relative;
         plans.at(-1).project = name;
       } catch (error) {
