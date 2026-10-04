@@ -146,3 +146,20 @@ Final integrated CI and independent joint re-review remain required.
 
 CI37185145653 passes public357a806 with both G2/G3 corrections (Go/60fixtures,
 Node16 and production build). Joint independent exact-head re-review is next.
+
+PC-WAZI complete. Independent review_observatory final PASS at public57dd957 vs
+baseadc4e8d covers T7.1/T7.3/T7.4; G2/G3 closed. PR1 merged by guarded GitHub
+REBASE on2026-10-04T07:22:35Z at47b9d91bca0d30ac44337a6e5aa710efa89bfcfd.
+Fetched target has exactly the reviewed tree and preserves base ancestry.
+CI37185210114 (candidate) and37185594744 (landed) both pass contract/observatory
+checks: Go tests,60 fixture outcomes,Node16 and production build. Landed Darwin
+verifier SHA256ea086c07024c3cb384e3327fbc037659878d12805660650e4d61753e97ee5f70
+ran offline: version/fixtures/valid pass; wrong digest and borrowed wrong-subject
+proof reject with exit2. Chrome main valid import and duplicate rejection retain
+selection without errors. Earlier full browser QA applies to identical code.
+Frozen0.0.1 public specification f04497a/digest7582512f remains unchanged.
+PC-WAZI-LANDED-01 handoff records durable Go source pin and disposable artifact
+retrieval, commands and trust limits. Original local history was preserved on
+archive/local-main-pre-public-20261004; local main tracks the public landing and
+its preview is open. E7 is complete; broader E3 observatory runtime remains future
+work. No production/provider/deployment or consumer authentication claim.
