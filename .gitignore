@@ -1,0 +1,11 @@
+node_modules
+dist/
+.artifacts/
+tmp/
+ajent.social
+tmp/
+.artifacts/
+ajent.social
+
+.env.local
+.env.*.local
