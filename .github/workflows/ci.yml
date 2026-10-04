@@ -46,3 +46,9 @@ jobs:
       - run: npm run build
         env:
           THREE_JS_SOURCE: ${{ github.workspace }}/.artifacts/three
+      - name: Preserve built frontend for offline acceptance
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: observatory-frontend
+          path: dist/client
+          retention-days: 3

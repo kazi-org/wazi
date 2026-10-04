@@ -17,3 +17,7 @@ Current source candidate: `bd965e6fb60facef12570f688a99afef7cf3d754`, CI `371924
 ## E3 corrected source review receipt
 
 Independent reviewer `/root/review` passed exact `88bee528e840c9d2c52ff8bf64831d0dad2f63a1` with a clean detached review checkout. R01 was withdrawn: existing App normalization already aligned browser task IDs; host normalization is now explicit. R02-R09 are fixed; no new verified source blocker was found in the bounded review. CI [37192695341](https://github.com/kazi-org/wazi/actions/runs/37192695341) passed at that head. Full E3 acceptance remains blocked by missing qualified Serenity owner reader/lineage APIs and Chrome `ERR_BLOCKED_BY_CLIENT`. T3.8, merge and landed verification are unrun; PR #3 remains draft. Owned preview stopped; unmerged SSD worktrees are retained for resumption. No provider request, release or deployment occurred.
+
+## Authorized candidate delivery continuation
+
+User explicitly requested headless review and merge after the blockers were reported. Deliver the reviewed observatory candidate with honest unavailable Serenity sections; rich owner integration and memory-derived runtime qualification remain open E3 tasks. This authorizes candidate merge without claiming those features complete. Use a separate headless browser session on SSD. Preserve CI-built frontend artifacts for exact-source offline browser and landed checks; hosted builds avoid the shared Mac load constraint.
