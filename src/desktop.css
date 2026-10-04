@@ -103,3 +103,6 @@
   pointer-events: none;
 }
 .desktop-chrome-status:empty { display: none; }
+
+/* Reserve page-owned controls without consuming or overlaying the 3D surface. */
+.app-shell.native-desktop { margin-top: 44px; height: calc(100dvh - 44px); min-height: 0; }

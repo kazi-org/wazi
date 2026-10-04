@@ -1,3 +1,5 @@
+import DesktopChrome from './DesktopChrome.jsx';
+import {getDesktopBridge} from './desktop.mjs';
 import {ObservatoryPanel} from './ObservatoryPanel.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpRight, ArrowsOut, ArrowsClockwise, Cube, SquaresFour, FolderSimple, FileText, UploadSimple, CaretRight, CaretLeft, CaretDown, X, LinkSimple, CheckCircle, Circle, LockSimple, SpinnerGap, Crosshair, MagnifyingGlass, Keyboard, List, ArrowLeft, Plus, Minus, Planet, Info } from '@phosphor-icons/react';
