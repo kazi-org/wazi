@@ -1,0 +1,50 @@
+name: Native Mac desktop checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  mac-desktop:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: mrdoob/three.js
+          ref: 1ea31f304854ee3c85df39fdb3eaec584bba6d9b
+          path: .artifacts/three
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run build
+        env:
+          THREE_JS_SOURCE: ${{ github.workspace }}/.artifacts/three
+      - name: Build owned host and native shell
+        run: |
+          mkdir -p .artifacts/build
+          GOOS=darwin GOARCH=arm64 go build -o .artifacts/build/wazi-host ./cmd/wazi
+          swiftc -target arm64-apple-macosx14.0 -module-cache-path .artifacts/swift-cache -o .artifacts/build/Wazi apps/macos/*.swift -framework AppKit -framework WebKit
+      - name: Assemble local-development app
+        run: python3 packaging/desktop/package_mac.py --output .artifacts/Wazi.app --host .artifacts/build/wazi-host --shell .artifacts/build/Wazi --assets dist/client --cache .artifacts/runtime
+      - name: Verify resources and pure native contract tests
+        run: |
+          python3 packaging/desktop/verify_bundle.py .artifacts/Wazi.app
+          test "$(uname -m)" = arm64
+          .artifacts/Wazi.app/Contents/MacOS/Wazi --self-test
+      - name: Archive development-only application
+        run: ditto -c -k --sequesterRsrc --keepParent .artifacts/Wazi.app .artifacts/Wazi-mac-arm64.zip
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wazi-mac-arm64-development
+          path: .artifacts/Wazi-mac-arm64.zip
+          retention-days: 3
