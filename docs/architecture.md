@@ -56,3 +56,9 @@ File imports and pasted Markdown stay in React memory for the current page sessi
 This document records code-derived behavior. It does not assert a new build, test run, or browser check. Existing repository verification notes remain in [docs/devlog.md](./devlog.md) and [docs/review.md](./review.md); those are historical evidence and should not be read as checks performed while writing this architecture document.
 
 Source snapshot: `8c5486d`. The proposed traceability extension is documented separately in [RFC 0002](rfc/0002-plan-code-evidence-traceability.md); it is not part of this runtime architecture.
+
+## E3 candidate architecture
+
+The historical snapshot above describes the pre-E3 prototype. The E3 candidate adds a Go loopback host (`cmd/wazi`, `internal/observatory`), a bounded parser bridge (`scripts/host-bridge.mjs`), an application routing boundary (`internal/app`), a scoped read-only owner adapter (`internal/context`), and private analysis persistence (`internal/deep`). It serves the built React/Three.js frontend. Browser import remains in memory; confirmed source links write only the selected repository's versioned sidecar. Credentials and private results remain in host-owned app data.
+
+Serenity transport remains a required unqualified owner capability. The adapter contract and fixture validation are implemented independently of a live reader; all five sections are unavailable when there is no supported authenticated scoped reader. This candidate architecture does not claim full E3 acceptance. Delivery evidence and the remaining owner gate are in `docs/e3-checkpoint.md` and `docs/plan.md`.

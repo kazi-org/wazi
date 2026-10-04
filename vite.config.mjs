@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const threeSource = process.env.THREE_JS_SOURCE || path.join(homedir(), 'Code/three.js');
+const threeSource = process.env.THREE_JS_SOURCE || path.join(homedir(), 'Code/dndungu/three.js');
 const planApi = () => ({
   name: 'local-read-only-plans',
   configureServer(server) {

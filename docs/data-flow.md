@@ -79,3 +79,9 @@ Imported Markdown goes straight through `parsePlan` in the browser and is added 
 ## Evidence note
 
 The descriptions above are code-derived from the linked implementation and parser tests. No new tests, build, or browser checks were run for this document. Any verification mentioned in [docs/devlog.md](./devlog.md) or [docs/review.md](./review.md) is inherited historical evidence, not a result of this documentation task.
+
+## E3 candidate flow
+
+Go host → bounded plan discovery/parser bridge → existing plan JSON → preserved React scene. Explicit project selection → bounded code snapshot → explained source/test proposals → user review → atomic versioned sidecar confirmation. Source previews and reverse task navigation use the selected snapshot and repository-relative file identity. Stale snapshot/sidecar inputs reject mutations.
+
+Explicitly configured repository scope → qualified read-only Serenity reader → five typed sections → leased browser view. Missing owner APIs produce unavailable sections, never brain-wide fallback. Explicit deeper-analysis click → host recaptures plan and confirmed code links → verifies exact displayed-context lease → lineage gate → private dispatch receipt/capacity reservation → configured provider → completed result. Exact qualified inputs may reuse completed results; unknown dispatches never resend automatically. Negative lineage invalidates bodies and unavailable lineage hides them. The explicit plan/code-only operation excludes memory. No provider call occurs from discovery, project selection, refresh or unavailable-context inspection.
