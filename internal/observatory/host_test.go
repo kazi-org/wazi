@@ -8,8 +8,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func TestSafeReadRejectsTraversalAndExternalSymlink(t *testing.T) {
@@ -228,6 +232,145 @@ func TestTaskIdentityAndBindingsRefreshAfterPlanEdit(t *testing.T) {
 	if b, err := os.ReadFile(filepath.Join(dataDir, "repositories.json")); err != nil || string(b) != "[]" {
 		t.Fatalf("corrupt registry changed: %q %v", b, err)
 	}
+}
+
+func TestRevokeBindingPreservesOtherLinksAndSource(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node is unavailable")
+	}
+	root := t.TempDir()
+	repo := filepath.Join(root, "project")
+	for _, dir := range []string{filepath.Join(repo, "docs"), filepath.Join(repo, "src"), filepath.Join(repo, ".git")} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	planPath := filepath.Join(repo, "docs", "plan.md")
+	plan := []byte("# Project plan\n\n- [ ] T1.1 Retain record\n")
+	code := []byte("package retain\n")
+	if err := os.WriteFile(planPath, plan, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "src", "retain.go"), code, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "src", "other.go"), []byte("package other\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	bridge, err := filepath.Abs(filepath.Join("..", "..", "scripts", "host-bridge.mjs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dataDir := filepath.Join(t.TempDir(), "private")
+	svc := New(root, dataDir, "node", bridge)
+	scan, err := svc.Discover(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scan.Projects) != 1 {
+		t.Fatalf("projects=%d", len(scan.Projects))
+	}
+	projectID := scan.Projects[0].ID
+	snap, err := svc.Snapshot(context.Background(), projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var suggestion *Suggestion
+	for i := range snap.Suggestions {
+		if snap.Suggestions[i].Target == "src/retain.go" {
+			suggestion = &snap.Suggestions[i]
+			break
+		}
+	}
+	if suggestion == nil {
+		t.Fatal("no candidate for primary file")
+	}
+	snap, err = svc.WriteBinding(projectID, suggestion.PlanPath, suggestion.TaskID, suggestion.Target, suggestion.Kind, suggestion.BasisDigest, snap.SidecarDigest, "confirm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap, err = svc.WriteBinding(projectID, suggestion.PlanPath, suggestion.TaskID, "src/other.go", "code", snap.SnapshotDigest, snap.SidecarDigest, "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.Bindings) != 2 {
+		t.Fatalf("before revoke bindings=%d", len(snap.Bindings))
+	}
+	snap, err = svc.WriteBinding(projectID, suggestion.PlanPath, suggestion.TaskID, suggestion.Target, suggestion.Kind, snap.SnapshotDigest, snap.SidecarDigest, "revoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.Bindings) != 1 || snap.Bindings[0].Target != "src/other.go" {
+		t.Fatalf("revoke did not preserve other binding: %#v", snap.Bindings)
+	}
+	if got, err := os.ReadFile(planPath); err != nil || string(got) != string(plan) {
+		t.Fatalf("plan changed: %q %v", got, err)
+	}
+	if got, err := os.ReadFile(filepath.Join(repo, "src", "retain.go")); err != nil || string(got) != string(code) {
+		t.Fatalf("source changed: %q %v", got, err)
+	}
+	if _, err = svc.WriteBinding(projectID, suggestion.PlanPath, suggestion.TaskID, suggestion.Target, suggestion.Kind, snap.SnapshotDigest, snap.SidecarDigest, "revoke"); err == nil {
+		t.Fatal("revoked a binding that was already absent")
+	}
+}
+
+func TestDiscoveryCancellationReapsParserProcess(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process cancellation assertion requires Unix signals")
+	}
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "pid")
+	node := filepath.Join(dir, "node")
+	script := "#!/bin/sh\nprintf '%s' $$ > '" + marker + "'\nexec /bin/sleep 60\n"
+	if err := os.WriteFile(node, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	bridge := filepath.Join(dir, "bridge.mjs")
+	if err := os.WriteFile(bridge, []byte(""), 0600); err != nil {
+		t.Fatal(err)
+	}
+	svc := New(dir, filepath.Join(dir, "data"), node, bridge)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { _, err := svc.Discover(ctx); done <- err }()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if _, err := os.Stat(marker); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			cancel()
+			t.Fatal("parser process did not start")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	pidBytes, err := os.ReadFile(marker)
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(string(pidBytes))
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("cancelled discovery succeeded")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("cancelled discovery did not return")
+	}
+	deadline = time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if err := syscall.Kill(pid, 0); err == syscall.ESRCH {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("parser process %d remained alive after discovery cancellation", pid)
 }
 
 func TestSnapshotRejectsPlanEditedAfterParserRead(t *testing.T) {

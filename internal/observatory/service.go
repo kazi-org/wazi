@@ -672,7 +672,11 @@ func (s *Service) WriteBinding(id, planPath, taskID, target, kind, basis, expect
 	if e != nil {
 		return Snapshot{}, e
 	}
-	if action == "manual" {
+	if action == "revoke" {
+		if basis != current.SnapshotDigest {
+			return Snapshot{}, errors.New("revoke basis is stale")
+		}
+	} else if action == "manual" {
 		if basis != current.SnapshotDigest {
 			return Snapshot{}, errors.New("manual link basis is stale")
 		}
@@ -718,6 +722,60 @@ func (s *Service) WriteBinding(id, planPath, taskID, target, kind, basis, expect
 	}
 	if expected != actual {
 		return Snapshot{}, errors.New("sidecar changed; refresh and review again")
+	}
+	if action == "revoke" {
+		cleanTarget := filepath.Clean(filepath.FromSlash(target))
+		if planPath == "" || taskID == "" || target == "" || (kind != "code" && kind != "test") || filepath.ToSlash(cleanTarget) != target || filepath.IsAbs(target) {
+			return Snapshot{}, errors.New("revoke requires a normalized binding identity")
+		}
+		rel, err := filepath.Rel(root, filepath.Join(root, cleanTarget))
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+			return Snapshot{}, errors.New("revoke target must stay inside selected project")
+		}
+		kept := make([]Binding, 0, len(side.Bindings))
+		removed := 0
+		for _, item := range side.Bindings {
+			if item.PlanPath == planPath && item.TaskID == taskID && item.Target == target && item.Kind == kind {
+				removed++
+				continue
+			}
+			kept = append(kept, item)
+		}
+		if removed != 1 {
+			return Snapshot{}, errors.New("binding to revoke was not uniquely present")
+		}
+		side.Bindings = kept
+		data, _ := json.MarshalIndent(side, "", "  ")
+		tmp, err := os.CreateTemp(dir, ".links-*.tmp")
+		if err != nil {
+			return Snapshot{}, err
+		}
+		name := tmp.Name()
+		defer os.Remove(name)
+		if _, err = tmp.Write(data); err == nil {
+			err = tmp.Sync()
+		}
+		closeErr := tmp.Close()
+		if err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			return Snapshot{}, err
+		}
+		if err = os.Chmod(name, 0600); err != nil {
+			return Snapshot{}, err
+		}
+		latest, readErr := safeRead(root, ".wazi/links.json", 1<<20)
+		if readErr != nil || digest(latest) != actual {
+			return Snapshot{}, errors.New("sidecar changed during update; refresh and review again")
+		}
+		if err = os.Rename(name, filepath.Join(dir, "links.json")); err != nil {
+			return Snapshot{}, err
+		}
+		s.mu.Unlock()
+		result, err := s.Snapshot(context.Background(), id)
+		s.mu.Lock()
+		return result, err
 	}
 	cleanTarget := filepath.Clean(filepath.FromSlash(target))
 	if target == "" || filepath.ToSlash(cleanTarget) != target {
@@ -772,7 +830,7 @@ func (s *Service) WriteBinding(id, planPath, taskID, target, kind, basis, expect
 	if !stable {
 		return Snapshot{}, errors.New("task lacks a stable authored ID or is ambiguous")
 	}
-	if action != "confirm" && action != "manual" && action != "dismiss" {
+	if action != "confirm" && action != "manual" && action != "dismiss" && action != "revoke" {
 		return Snapshot{}, errors.New("invalid action")
 	}
 	planDigest = current.PlanDigest
