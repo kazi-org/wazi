@@ -130,12 +130,39 @@ func TestCapacityAndManifestScopePreflightBeforeProvider(t *testing.T) {
 	}
 	m := manifest(ContextMemory)
 	m.ContextScope.ReferenceIDs = []string{"not-the-displayed-ref"}
+	m.ContextScope.EntityIDs = []string{"not-the-displayed-entity"}
 	if _, err = Key(m); err == nil {
 		t.Fatal("scope/reference mismatch accepted")
 	}
 	if calls.Load() != 0 {
 		t.Fatalf("provider calls after invalid manifest=%d", calls.Load())
 	}
+}
+
+func TestManifestScopeAllowsReferenceOrEntityQualification(t *testing.T) {
+	t.Run("entity-only", func(t *testing.T) {
+		m := manifest(ContextMemory)
+		m.ContextScope.ReferenceIDs = nil
+		if _, err := Key(m); err != nil {
+			t.Fatalf("mapped entity scope rejected: %v", err)
+		}
+	})
+	t.Run("reference-only", func(t *testing.T) {
+		m := manifest(ContextMemory)
+		m.ContextScope.EntityIDs = nil
+		m.Context[0].EntityID = ""
+		if _, err := Key(m); err != nil {
+			t.Fatalf("mapped reference scope rejected: %v", err)
+		}
+	})
+	t.Run("neither", func(t *testing.T) {
+		m := manifest(ContextMemory)
+		m.ContextScope.EntityIDs = []string{"unmapped-entity"}
+		m.ContextScope.ReferenceIDs = []string{"unmapped-reference"}
+		if _, err := Key(m); err == nil {
+			t.Fatal("unmapped reference and entity were accepted")
+		}
+	})
 }
 
 func TestMemoryUnavailableHidesWithoutDeletingAndInvalidationRemovesBody(t *testing.T) {
