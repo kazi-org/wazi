@@ -166,7 +166,8 @@ func TestDesktopRejectsMissingResourcesAndNonceBeforeReadiness(t *testing.T) {
 	if err == nil {
 		t.Fatal("missing nonce accepted")
 	}
-	if f.stdout.Buffered() != 0 {
+	output, _ := io.ReadAll(f.stdout)
+	if f.stdout.Buffered() != 0 || len(output) != 0 {
 		t.Fatal("readiness emitted for invalid nonce")
 	}
 	f = fixture(t)
@@ -176,7 +177,8 @@ func TestDesktopRejectsMissingResourcesAndNonceBeforeReadiness(t *testing.T) {
 	if err == nil {
 		t.Fatal("missing parser resource accepted")
 	}
-	if f.stdout.Buffered() != 0 {
+	output, _ = io.ReadAll(f.stdout)
+	if f.stdout.Buffered() != 0 || len(output) != 0 {
 		t.Fatal("readiness emitted with missing resource")
 	}
 }
