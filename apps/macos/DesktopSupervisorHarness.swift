@@ -43,12 +43,12 @@ enum DesktopSupervisorHarness {
             supervisor.start()
 
             guard pump(until: { outcome != nil }, seconds: 3) else {
-                supervisor.stop()
+                supervisor.stop(completion: {})
                 throw HarnessError.timedOut(scenario.rawValue)
             }
             let expected: Outcome = scenario == .validStop ? .ready : .failed
             guard outcome == expected else {
-                supervisor.stop()
+                supervisor.stop(completion: {})
                 guard pump(until: { !supervisor.hasOwnedProcess }, seconds: 3) else {
                     throw HarnessError.childLeaked(scenario.rawValue)
                 }
@@ -65,7 +65,7 @@ enum DesktopSupervisorHarness {
                 }
             } else {
                 guard pump(until: { !supervisor.hasOwnedProcess }, seconds: 3) else {
-                    supervisor.stop()
+                    supervisor.stop(completion: {})
                     throw HarnessError.childLeaked(scenario.rawValue)
                 }
             }
