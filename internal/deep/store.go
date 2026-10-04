@@ -76,9 +76,6 @@ func validate(m Manifest) error {
 	if digest(m.PlanBody) != m.PlanDigest {
 		return errors.New("plan body digest does not match manifest")
 	}
-	if len(m.Code) == 0 {
-		return errors.New("selected code input is required")
-	}
 	var codeDigestInput strings.Builder
 	inputBytes := len(m.PlanBody) + len(m.Question)
 	for _, c := range m.Code {
@@ -132,7 +129,7 @@ func validate(m Manifest) error {
 				break
 			}
 		}
-		if c.OwnerRef == "" || c.Kind == "" || c.ExpiresAt.IsZero() || (!refOK && !entityOK) || c.BrainID != m.ContextScope.BrainID || c.AudienceID != m.ContextScope.AudienceID || c.ProjectID != m.ContextScope.ProjectID || c.ContentDigest == "" || c.Version == "" || c.Body == "" || digest(c.Body) != c.ContentDigest {
+		if c.OwnerRef == "" || c.Kind == "" || c.ExpiresAt.IsZero() || (!refOK && !entityOK) || c.BrainID != m.ContextScope.BrainID || c.AudienceID != m.ContextScope.AudienceID || c.ProjectID != m.ContextScope.ProjectID || c.ContentDigest == "" || c.Version == "" || c.Body == "" || !digestMatches(c.Body, c.ContentDigest) {
 			return errors.New("context item is missing displayed content or exact scoped lineage")
 		}
 		inputBytes += len(c.Body)
@@ -203,19 +200,12 @@ func (s *Service) Analyze(ctx context.Context, m Manifest) (Result, error) {
 			return Result{}, fmt.Errorf("validate memory lineage before dispatch: %w", err)
 		}
 	}
-	releaseCapacity, err := s.reserveCapacity(ctx, key, m)
+	stored := metadataManifest(m)
+	releaseCapacity, err := s.reserveCapacity(ctx, key, stored)
 	if err != nil {
 		return Result{}, err
 	}
 	defer releaseCapacity()
-	stored := cloneManifest(m)
-	if ephemeral {
-		stored.PlanBody = ""
-		stored.Code = nil
-		for i := range stored.Context {
-			stored.Context[i].Body = ""
-		}
-	}
 	r := receipt{Key: key, Status: "dispatching", Manifest: stored, UpdatedAt: time.Now().UTC()}
 	if err := s.write(r); err != nil {
 		return Result{}, err
@@ -241,7 +231,23 @@ func (s *Service) Analyze(ctx context.Context, m Manifest) (Result, error) {
 		if err := s.write(r); err != nil {
 			return Result{}, err
 		}
-		return Result{Key: key, TaskRef: m.TaskRef, Answer: answer, Model: m.Model, CreatedAt: r.CreatedAt, Status: "ephemeral", Freshness: "session_only", Persistence: false}, nil
+		result := Result{Key: key, TaskRef: m.TaskRef, Answer: answer, Model: m.Model, CreatedAt: r.CreatedAt, Status: "ephemeral", Freshness: "session_only", Persistence: false}
+		if m.ContextMode == ContextMemory {
+			until := capturedVisibleUntil(m, time.Now())
+			if s.validator != nil {
+				validation, e := s.checkLineage(ctx, m)
+				if e != nil {
+					return Result{Key: key, TaskRef: m.TaskRef, Model: m.Model, CreatedAt: r.CreatedAt, Status: "hidden", Freshness: "owner_unavailable", MemoryDerived: true}, e
+				}
+				until = validation.ValidUntil
+			}
+			if !until.After(time.Now()) {
+				return Result{Key: key, TaskRef: m.TaskRef, Model: m.Model, CreatedAt: r.CreatedAt, Status: "invalidated", Freshness: "expired", MemoryDerived: true}, ErrLineageInvalid
+			}
+			result.MemoryDerived = true
+			result.VisibleUntil = until
+		}
+		return result, nil
 	}
 	if err := s.write(r); err != nil {
 		return Result{Key: key, Model: m.Model, Status: "unknown", Freshness: "unknown"}, fmt.Errorf("persist completed answer; outcome retained as dispatched: %w", err)
@@ -258,20 +264,35 @@ func cloneManifest(m Manifest) Manifest {
 	return m
 }
 
+func metadataManifest(m Manifest) Manifest {
+	m = cloneManifest(m)
+	m.Question = ""
+	m.PlanBody = ""
+	for i := range m.Code {
+		m.Code[i].Body = ""
+	}
+	for i := range m.Context {
+		m.Context[i].Body = ""
+	}
+	return m
+}
+
 func (s *Service) visible(ctx context.Context, r receipt) (Result, error) {
 	if r.Status != "completed" {
 		return Result{Key: r.Key, Model: r.Manifest.Model, Status: r.Status, Freshness: r.Status}, nil
 	}
+	visibleUntil := time.Time{}
 	if r.Manifest.ContextMode == ContextMemory {
 		if s.validator == nil || !s.memoryPersistence {
-			return Result{Key: r.Key, Model: r.Manifest.Model, Status: "hidden", Freshness: "owner_unavailable"}, ErrMemoryUnavailable
+			return Result{Key: r.Key, Model: r.Manifest.Model, Status: "hidden", Freshness: "owner_unavailable", MemoryDerived: true}, ErrMemoryUnavailable
 		}
-		if _, err := s.checkLineage(ctx, r.Manifest); err != nil {
+		validation, err := s.checkLineage(ctx, r.Manifest)
+		if err != nil {
 			if errors.Is(err, ErrMemoryUnavailable) {
-				return Result{Key: r.Key, Model: r.Manifest.Model, Status: "hidden", Freshness: "owner_unavailable"}, err
+				return Result{Key: r.Key, Model: r.Manifest.Model, Status: "hidden", Freshness: "owner_unavailable", MemoryDerived: true}, err
 			}
 			if !errors.Is(err, ErrLineageInvalid) {
-				return Result{Key: r.Key, Model: r.Manifest.Model, Status: "hidden", Freshness: "owner_unavailable"}, fmt.Errorf("memory lineage could not be revalidated: %w", err)
+				return Result{Key: r.Key, Model: r.Manifest.Model, Status: "hidden", Freshness: "owner_unavailable", MemoryDerived: true}, fmt.Errorf("memory lineage could not be revalidated: %w", err)
 			}
 			r.Answer = ""
 			r.Manifest.PlanBody = ""
@@ -282,10 +303,11 @@ func (s *Service) visible(ctx context.Context, r receipt) (Result, error) {
 			}
 			r.UpdatedAt = time.Now().UTC()
 			_ = s.write(r)
-			return Result{Key: r.Key, Model: r.Manifest.Model, Status: "invalidated", Freshness: "invalidated"}, fmt.Errorf("memory-derived answer invalidated: %w", err)
+			return Result{Key: r.Key, Model: r.Manifest.Model, Status: "invalidated", Freshness: "invalidated", MemoryDerived: true}, fmt.Errorf("memory-derived answer invalidated: %w", err)
 		}
+		visibleUntil = validation.ValidUntil
 	}
-	return Result{Key: r.Key, TaskRef: r.Manifest.TaskRef, Answer: r.Answer, Model: r.Manifest.Model, CreatedAt: r.CreatedAt, Status: "completed", Freshness: "current", Persistence: true}, nil
+	return Result{Key: r.Key, TaskRef: r.Manifest.TaskRef, Answer: r.Answer, Model: r.Manifest.Model, CreatedAt: r.CreatedAt, Status: "completed", Freshness: "current", Persistence: true, MemoryDerived: r.Manifest.ContextMode == ContextMemory, VisibleUntil: visibleUntil}, nil
 }
 
 func (s *Service) checkLineage(ctx context.Context, m Manifest) (LineageValidation, error) {
@@ -305,7 +327,37 @@ func (s *Service) checkLineage(ctx context.Context, m Manifest) (LineageValidati
 	if !v.Valid {
 		return v, ErrLineageInvalid
 	}
+	if v.ValidUntil.IsZero() {
+		return v, fmt.Errorf("%w: owner did not provide a validity deadline", ErrMemoryUnavailable)
+	}
+	if !v.ValidUntil.After(time.Now()) {
+		return v, ErrLineageInvalid
+	}
+	v.ValidUntil = minTime(v.ValidUntil, capturedVisibleUntil(m, time.Now()))
+	if !v.ValidUntil.After(time.Now()) {
+		return v, ErrLineageInvalid
+	}
 	return v, nil
+}
+
+func capturedVisibleUntil(m Manifest, now time.Time) time.Time {
+	until := now.Add(time.Minute)
+	for _, c := range m.Context {
+		if !c.ExpiresAt.IsZero() && c.ExpiresAt.Before(until) {
+			until = c.ExpiresAt
+		}
+	}
+	return until
+}
+func minTime(a, b time.Time) time.Time {
+	if a.IsZero() || (!b.IsZero() && b.Before(a)) {
+		return b
+	}
+	return a
+}
+func digestMatches(body, token string) bool {
+	d := digest(body)
+	return token == d || token == "sha256:"+d
 }
 
 func (s *Service) inspect(ctx context.Context, key string) (Result, error) {
@@ -480,16 +532,17 @@ func (s *Service) Regenerate(ctx context.Context, m Manifest, costDisclosure Cos
 			return Result{}, e
 		}
 	}
-	releaseCapacity, e := s.reserveCapacity(ctx, key, m)
+	stored := metadataManifest(m)
+	releaseCapacity, e := s.reserveCapacity(ctx, key, stored)
 	if e != nil {
 		return Result{}, e
 	}
 	defer releaseCapacity()
-	r := receipt{Key: key, Status: "dispatching", Manifest: m, UpdatedAt: time.Now().UTC()}
+	r := receipt{Key: key, Status: "dispatching", Manifest: stored, UpdatedAt: time.Now().UTC()}
 	if e = s.write(r); e != nil {
 		return Result{}, e
 	}
-	ans, e := s.engine.Complete(ctx, m)
+	ans, e := s.engine.Complete(ctx, cloneManifest(m))
 	if e != nil {
 		r.Status = "unknown"
 		r.UpdatedAt = time.Now().UTC()

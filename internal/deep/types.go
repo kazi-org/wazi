@@ -80,15 +80,17 @@ type Manifest struct {
 }
 
 type Result struct {
-	Key         string    `json:"key"`
-	TaskRef     string    `json:"taskRef,omitempty"`
-	Answer      string    `json:"answer,omitempty"`
-	Model       string    `json:"model"`
-	CreatedAt   time.Time `json:"createdAt,omitempty"`
-	Freshness   string    `json:"freshness"`
-	Status      string    `json:"status"`
-	Persistence bool      `json:"persistence"`
-	Cached      bool      `json:"cached"`
+	Key           string    `json:"key"`
+	TaskRef       string    `json:"taskRef,omitempty"`
+	Answer        string    `json:"answer,omitempty"`
+	Model         string    `json:"model"`
+	CreatedAt     time.Time `json:"createdAt,omitempty"`
+	Freshness     string    `json:"freshness"`
+	Status        string    `json:"status"`
+	Persistence   bool      `json:"persistence"`
+	Cached        bool      `json:"cached"`
+	MemoryDerived bool      `json:"memoryDerived"`
+	VisibleUntil  time.Time `json:"visibleUntil,omitempty"`
 }
 
 type Engine interface {
@@ -98,8 +100,9 @@ type LineageValidator interface {
 	ValidateLineage(context.Context, ContextScope, []ContextItem) (LineageValidation, error)
 }
 type LineageValidation struct {
-	Available bool
-	Valid     bool
+	Available  bool
+	Valid      bool
+	ValidUntil time.Time
 }
 
 type CostDisclosure struct {
