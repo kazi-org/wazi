@@ -83,8 +83,10 @@ final class DesktopWindowController: NSWindowController, NSWindowDelegate, WKNav
         onWebContentFailure?()
     }
 
-    func webView(_ webView: WKWebView, didReceive message: WKScriptMessage) {
-        guard self.webView === webView,
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let sourceWebView = message.webView,
+              self.webView === sourceWebView,
+              sourceWebView.configuration.userContentController === userContentController,
               message.frameInfo.isMainFrame,
               let origin = pinnedOrigin,
               DesktopContract.matches(origin, scheme: message.frameInfo.securityOrigin.`protocol`, host: message.frameInfo.securityOrigin.host, port: message.frameInfo.securityOrigin.port),
