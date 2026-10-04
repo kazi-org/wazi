@@ -67,7 +67,7 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
       {context?.scope&&<p className="context-scope">Scope: {context.scope.projectId||context.scope.project||'selected project'} · {context.scope.audience||'unqualified audience'}</p>}
       {sectionNames.map(name=>{const section=context?.sections?.[name];return <details className="context-section" key={name}><summary>{sectionLabel(name)} · {section?.status||'unavailable'}</summary>{section?.items?.length?section.items.map((item,i)=><p key={item.id||i}>{item.text||item.content}</p>):<p className="muted-copy">{section?.reason||context?.unavailable||'No qualified owner read API configured for this section.'}</p>}</details>;})}
     </section>
-    <section className="inspector-section"><h3>DIG DEEPER</h3><p className="muted-copy">An explicit request sends selected plan/code and the scoped context displayed here to OpenRouter. A provider request may incur a charge.</p>
+    <section className="inspector-section"><h3>DIG DEEPER</h3><p className="muted-copy">An explicit request sends selected plan and confirmed code links, plus the scoped context displayed here to OpenRouter. A provider request may incur a charge.</p>
       <label className="observatory-label">Your question<textarea value={question} onChange={e=>setQuestion(e.target.value)} maxLength={2000}/></label>
       <button disabled={busy||!snapshot||!question.trim()} onClick={()=>deeper()}>Dig deeper{busy?' · requesting…':''}</button>
       <button disabled={busy||!snapshot||!question.trim()} onClick={()=>deeper('plan-code-only')}>Plan/code only · omit brain context</button>
