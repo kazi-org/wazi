@@ -44,7 +44,42 @@ func main() {
 	if st, e := os.Stat(absAssets); e != nil || !st.IsDir() {
 		fatal("frontend assets missing; build frontend first")
 	}
-	host, e := observatory.NewHost(svc, http.FileServer(http.Dir(absAssets)), nil)
+	var contextService *brain.Service
+	if *contextMap != "" {
+		raw, err := os.ReadFile(*contextMap)
+		if err != nil {
+			fatal("context configuration unavailable")
+		}
+		var config brain.HostConfig
+		if err = json.Unmarshal(raw, &config); err != nil {
+			fatal("context configuration invalid")
+		}
+		contextService, err = brain.NewService(config, nil)
+		if err != nil {
+			fatal("context scope configuration invalid")
+		}
+	}
+	var engine deep.Engine
+	if *enableAI {
+		provider, err := deep.NewOpenRouter(os.Getenv("WAZI_OPENROUTER_KEY"))
+		if err != nil {
+			fatal("explicit OpenRouter configuration unavailable")
+		}
+		engine = provider
+	}
+	analysisDir := filepath.Join(absData, "answers")
+	check(os.MkdirAll(analysisDir, 0700))
+	backup, backupErr := deep.EnsureBackupExclusion(context.Background(), analysisDir)
+	if backupErr != nil || !backup.Qualified {
+		fmt.Fprintln(os.Stderr, "memory-derived durable storage remains unqualified")
+	}
+	// No supported owner Reader is present yet; configuration alone cannot qualify memory persistence.
+	analysis, err := deep.New(deep.Config{Dir: analysisDir, MaxBytes: 64 << 20, Engine: engine, Validator: app.LineageAdapter{Service: contextService}, MemoryPersistenceQualified: false})
+	if err != nil {
+		fatal("private analysis storage unavailable")
+	}
+	routes := &app.Routes{Observatory: svc, Context: contextService, Deep: analysis}
+	host, e := observatory.NewHost(svc, http.FileServer(http.Dir(absAssets)), routes.Handle)
 	check(e)
 	bind := fmt.Sprintf("127.0.0.1:%d", *port)
 	ln, e := net.Listen("tcp", bind)
