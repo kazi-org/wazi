@@ -46,3 +46,6 @@
   .inspector-toggle-inline{display:flex}
 }
 @media(min-width:701px){.workspace-heading-actions{display:flex;align-items:center;gap:2px}.inspector-toggle-inline[aria-expanded="true"] svg{transform:rotate(180deg)}}
+
+.authored-note{margin:10px 0;color:#e9c981;font-size:11px;line-height:1.55}.source-original summary{color:#aab4cc;font-size:11px;cursor:pointer}.source-original pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:10px;background:#0b1020;border:1px solid var(--border);border-radius:6px;color:#aab4cc;font:10px/1.55 "IBM Plex Mono",monospace}
+.source-badge.portable{color:#f0cb88;border-color:#614b28;background:#302617}.portable-report>p{color:#d9ba80;font-size:11px;line-height:1.55}.portable-items{display:grid;gap:5px;margin:12px 0;color:#aeb8d0;font-size:10px;line-height:1.5}.portable-items>strong{color:#e1e7f5;font-size:10px}

@@ -1,0 +1,117 @@
+{
+  "contractVersion": "0.0.1",
+  "definition": {
+    "id": "example:portable-display",
+    "revision": "source-r4",
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "title": "Neutral portable display fixture",
+    "source": {
+      "authority": "markdown",
+      "authorityId": "example:repository",
+      "ref": "docs/plan.md",
+      "revision": "source-r4",
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "adapterVersion": "fixture/1"
+    },
+    "tasks": [
+      {
+        "id": "example:portable-display:550e8400-e29b-41d4-a716-446655440000",
+        "title": "Retain an open review stage",
+        "stage": "rereview",
+        "authoredStatus": "pending",
+        "acceptance": "First opaque criterion.\nSecond line: preserved verbatim.",
+        "source": {
+          "ref": "docs/plan.md",
+          "line": 8,
+          "canonicalId": "550e8400-e29b-41d4-a716-446655440000",
+          "raw": "- [x] T8.2 Retain an open review stage\n  Acceptance: First opaque criterion.\n    Second line: preserved verbatim."
+        },
+        "dependencies": [],
+        "metadata": {
+          "provider": "example:reviewer",
+          "policyRevision": "review-policy-r4",
+          "opaqueExtension": {
+            "nested": ["retained", 7, true]
+          }
+        }
+      }
+    ],
+    "requirements": [
+      {
+        "id": "example:portable-display:req-review",
+        "taskId": "example:portable-display:550e8400-e29b-41d4-a716-446655440000",
+        "predicate": "independent-approved",
+        "policyRevision": "review-policy-r4",
+        "subject": {
+          "head": "abc123"
+        }
+      }
+    ],
+    "executionUnits": [],
+    "metadata": {
+      "sourceState": "unknown",
+      "other": {
+        "mustRemain": "here"
+      }
+    }
+  },
+  "snapshot": {
+    "planId": "example:portable-display",
+    "planRevision": "source-r4",
+    "planDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "observedAt": "2026-10-04T00:00:00Z",
+    "executions": [
+      {
+        "taskId": "example:portable-display:550e8400-e29b-41d4-a716-446655440000",
+        "attemptId": "example:attempt-1",
+        "state": "complete"
+      }
+    ],
+    "metadata": {},
+    "subject": {
+      "head": "abc123"
+    }
+  },
+  "evidence": [
+    {
+      "id": "example:evidence-review-1",
+      "taskId": "example:portable-display:550e8400-e29b-41d4-a716-446655440000",
+      "attemptId": "example:attempt-1",
+      "planRevision": "source-r4",
+      "planDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "kind": "review",
+      "subject": {
+        "head": "abc123"
+      },
+      "producer": "example:reviewer",
+      "verifier": "example:verifier",
+      "contributors": ["example:author"],
+      "result": "passed",
+      "observedAt": "2026-10-04T00:00:00Z",
+      "provenance": "example:review-record",
+      "trust": "verified",
+      "auditOnly": false,
+      "metadata": {
+        "retained": true
+      },
+      "policyRevision": "review-policy-r4"
+    }
+  ],
+  "evaluations": [
+    {
+      "id": "example:evaluation-review-1",
+      "requirementId": "example:portable-display:req-review",
+      "taskId": "example:portable-display:550e8400-e29b-41d4-a716-446655440000",
+      "attemptId": "example:attempt-1",
+      "planRevision": "source-r4",
+      "planDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "evidenceIds": ["example:evidence-review-1"],
+      "policyRevision": "review-policy-r4",
+      "outcome": "satisfied",
+      "evaluatedAt": "2026-10-04T00:00:00Z",
+      "authority": "example:policy-engine",
+      "qualification": "verified",
+      "metadata": {}
+    }
+  ]
+}

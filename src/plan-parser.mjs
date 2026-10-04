@@ -32,11 +32,12 @@ function withoutFences(markdown) {
   });
 }
 
-const METADATA_FIELDS = 'Owner|Est|kind|verifies|delivers|lane|stage|blocked-by|deps|dependencies|acc|Acceptance|Status|fidelity|Wave|Scope|Contract|External gate';
+const METADATA_FIELDS = 'Owner|Est|kind|verifies|delivers|lane|stage|blocked-by|deps|dependencies|acc|Acceptance|Status|fidelity|Wave|Scope|Contract|External gate|lifecycle|provider|canonical-id|canonical_id|canonical-task-id|canonical_task_id|canonical id|canonicalId|task-id|task_id|task id|taskId|uuid|policy|policy-revision|policy_revision|policy revision|attempt|revision|source|source-revision|source_revision|source revision|base|head|artifact|environment|producer|verifier|result|time|provenance|evidence|requirement|execution|service|claim-id|claim_id|claim id|dispatch-id|dispatch_id|dispatch id|owner-id|owner_id|owner id|adapter|schema|schema-version|schema_version|schema version|authority|status-source|status_source|status source';
 
 function metadataFields(text) {
   const fields = [];
-  const pattern = new RegExp(`(?:^|\\s)(${METADATA_FIELDS})\\s*:`, 'ig');
+  const known = new Set(METADATA_FIELDS.split('|').map((name) => name.toLowerCase()));
+  const pattern = new RegExp(`(?:^|\\s)(${METADATA_FIELDS}|[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)+)\\s*:`, 'ig');
   let brackets = 0;
   let inlineCode = false;
   let cursor = 0;
@@ -47,7 +48,14 @@ function metadataFields(text) {
       else if (!inlineCode && text[cursor] === '[') brackets += 1;
       else if (!inlineCode && text[cursor] === ']') brackets = Math.max(0, brackets - 1);
     }
-    if (brackets === 0 && !inlineCode) fields.push({ name: match[1].toLowerCase(), start: match.index + match[0].search(/\S/), valueStart: pattern.lastIndex });
+    const name = match[1].toLowerCase();
+    const start = match.index + match[0].search(/\S/);
+    const isFirstKnownField = known.has(name) && !fields.some((item) => known.has(item.name));
+    if (brackets === 0 && !inlineCode && (known.has(name) || fields.some((item) => known.has(item.name)))) {
+      fields.push({ name, start, valueStart: pattern.lastIndex });
+    } else if (isFirstKnownField && brackets === 0 && !inlineCode) {
+      fields.push({ name, start, valueStart: pattern.lastIndex });
+    }
     cursor = pattern.lastIndex;
   }
   return fields;
@@ -84,7 +92,8 @@ function field(text, name) {
   if (text[start] === '[') {
     return bracketValue(text.slice(0, end), start).value;
   }
-  return text.slice(start, end).replace(/[.;,]+\s*$/, '').trim();
+  const value = text.slice(start, end).trim();
+  return ['acc', 'acceptance'].includes(name.toLowerCase()) ? value : value.replace(/[.;,]+\s*$/, '').trim();
 }
 
 function titleText(firstLine, hasId) {
@@ -104,18 +113,7 @@ function listField(text, name) {
 
 function acceptanceField(text) {
   const compact = field(text, 'acc');
-  const lines = text.split('\n');
-  const acceptanceLine = lines.findIndex((line) => /^\s*(?:[-*+]\s*)?Acceptance\s*:/i.test(line));
-  let detailed = '';
-  if (acceptanceLine >= 0) {
-    const captured = [];
-    for (let i = acceptanceLine; i < lines.length; i += 1) {
-      const line = lines[i].trim().replace(/^[-*+]\s*/, '');
-      if (i > acceptanceLine && /^(?:Contract|Scope|Stage|Wave|External gate|Decision|Rationale|Status|kind|Owner)\s*:/i.test(line)) break;
-      captured.push(i === acceptanceLine ? line.replace(/^Acceptance\s*:\s*/i, '') : line);
-    }
-    detailed = captured.join('\n').trim();
-  }
+  const detailed = field(text, 'acceptance');
   return [compact, detailed].filter(Boolean).join('\n');
 }
 
@@ -150,32 +148,41 @@ export function parsePlan(markdown, { path: sourcePath = 'plan.md', project = 'P
     const marker = match[1].toLowerCase();
     const checked = marker === 'x';
     const firstLine = match[2].trim();
-    const idMatch = firstLine.match(/^([A-Z][A-Z0-9]*(?:[.-][A-Z0-9]+)+)\b/i);
-    const sourceId = idMatch?.[1]?.toUpperCase() || `line-${lineNumber}`;
-    let block = firstLine;
+    const idMatch = firstLine.match(/^((?:[A-Z][A-Z0-9]*(?:[.-][A-Z0-9]+)+)|(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))\b/i);
+    const isUuidId = idMatch?.[1] && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idMatch[1]);
+    const sourceId = idMatch?.[1] ? (isUuidId ? idMatch[1] : idMatch[1].toUpperCase()) : `line-${lineNumber}`;
     let end = index + 1;
     while (end < lines.length && !/^\s*[-*+]\s+\[[ xX~-]\]\s+/.test(lines[end]) && !/^\s{0,3}#{1,6}\s+/.test(lines[end])) {
-      if (/^\s{2,}/.test(lines[end]) || /^\s*(?:Acceptance|Stage|Status)\s*:/i.test(lines[end])) block += `\n${lines[end].trim()}`;
+      const line = lines[end];
+      const continuation = /^\s{2,}/.test(line) || /^\s*(?:Acceptance|Stage|Status)\s*:/i.test(line) || /^\s*[A-Za-z][A-Za-z0-9_-]*\s*:/.test(line);
+      if (line.trim() && !continuation) break;
       end += 1;
     }
+    const sourceBlock = lines.slice(index, end).join('\n');
+    const block = [firstLine, ...lines.slice(index + 1, end).map((line) => line.trim())].join('\n');
     const epic = taskEpic(lines, index) || headingEpic;
     if (epic) epicsById.set(epic.id, epic);
     const explicitStatus = field(block, 'status')?.toLowerCase();
     const dependencies = [...new Set([...listField(block, 'blocked-by'), ...listField(block, 'deps'), ...listField(block, 'dependencies')].map((item) => item.toUpperCase()))];
     const stage = field(block, 'stage') || block.match(/(?:^|[;\n])\s*Stage\s*:\s*([^;\n.]+)/i)?.[1]?.trim() || '';
     const owner = field(block, 'owner') || '';
+    const metadata = Object.fromEntries(metadataFields(block).map(({ name }) => [name, field(block, name)]).filter(([, value]) => value !== undefined));
     const status = checked ? 'complete' : marker === '~' ? 'active' : marker === '-' ? 'blocked' : explicitStatus === 'blocked' ? 'blocked' : explicitStatus === 'active' || explicitStatus === 'in-progress' ? 'active' : 'pending';
     const source = `${sourcePath}:${lineNumber}`;
     tasks.push({
       id: stableId('task', `${project}\0${sourcePath}\0${sourceId}`),
       sourceId,
+      canonicalId: metadata['canonical-id'] || metadata.canonical_id || metadata['canonical-task-id'] || metadata.canonical_task_id || metadata['canonical id'] || metadata.canonicalid || metadata['task-id'] || metadata.task_id || metadata['task id'] || metadata.taskid || metadata.uuid || (isUuidId ? idMatch[1] : ''),
       title: titleText(firstLine, Boolean(idMatch)) || sourceId,
       status,
+      authoredStatus: marker === 'x' ? 'checked' : marker === '~' ? 'in-progress-marker' : marker === '-' ? 'blocked-marker' : 'unchecked',
       stage,
       epicId: epic?.id || '',
       epicTitle: epic?.title || '',
       owner,
       acceptance: acceptanceField(block),
+      metadata,
+      sourceBlock,
       dependencies,
       line: lineNumber,
       source,

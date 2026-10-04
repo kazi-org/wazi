@@ -59,3 +59,25 @@ The final camera audit found the resize callback itself also called `home()`; th
 Independent read-only review PASS at exact implementation head `77a9d502f39c969e03fb8cfcd0485c4fe2912ae9`, base `7021c382704877d1511f3ead1ec74b7d470c1e2a`: no actionable blocker. Review confirmed camera retention/reset behavior, panel sizing, responsive controls, drawer focus/inert behavior, modal transition focus and inspector close focus. The reviewer did not run builds or services. Final build passed at one-minute load 5.27; additional Chrome verification at 900 x 800 found an 834 px scene, working inline inspector controls and no overflow/errors. All 86 local documentation links resolve and whitespace checks pass. Root main remains clean at the base; local fast-forward integration is next.
 
 Reviewed implementation and status record fast-forwarded into local main at `f3e65665358011d718e12474164aeab0d9b1b5ba`. Landed App/CSS/Space files match exact reviewed head `77a9d50`; main Chrome preview independently verified default 66 px icon navigation, 1170 px scene, both panel expansion/collapse and preserved selected task. Error log remained empty. The viewport override was reset and the main preview left open; the temporary candidate preview is closed. E6 is complete. No remote publication or deployment.
+
+## 2026-10-04 — PC-WAZI portable contract delivery
+
+Direct user ship request follows the bounded implementation dispatch, superseding
+the earlier discussion-only stewardship restriction for this package. Source
+inventory found the existing Markdown parser, Vite loopback discovery and
+React/Three.js display; no Go module or existing GitHub base/checks exist. Main
+was clean at bdf61d0. Separate SSD validator and display lanes preserve all old
+worktrees. Installed Kazi cannot route the active Codex harness/model, so the
+qualified current-session GPT-6-Luna fallback is used without installing tools
+or activating another provider. Heavy build/test execution is held above load10.
+
+Candidate 0d23e9a published to shared channel; CT001 duplicate manifest catalog
+entry and CT002 conflicting logical evaluations were accepted and fixed in
+127c393. Independent bounded contract audit passed that exact head. Consumer
+feedback made the single-file Markdown bound, split/source diagnostics, native
+metadata/array acceptance, heterogeneous subject and context/policy distinctions
+explicit. Frozen 0.0.1 specification at16b66e5 has60 neutral cases and digest
+7582512f122d2f2a9c4461facc7541c9887053f137260d6ebe9c6dea611d039d.
+Adapters may pin those immutable bytes; Go conformance is still pending and no
+runtime or receipt authentication is inferred. Initial remote publication must
+avoid disclosing historical local-only machine paths or agent channels.

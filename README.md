@@ -11,7 +11,7 @@ npm run dev -- --port 4193 --strictPort
 
 Open http://127.0.0.1:4193/. The development server reads local plans. The static build contains the sample workflow and supports Markdown import; it does not include your local project data.
 
-The default Three.js source is `~/Code/three.js`, using its existing `build/three.module.js` and `examples/jsm/controls/OrbitControls.js`. Override with `THREE_JS_SOURCE=/path/to/three.js`. This checkout is consumed without modification. Fonts and [Phosphor](https://phosphoricons.com/) icons are installed locally; the browser makes no external asset requests.
+Select a local Three.js checkout with `THREE_JS_SOURCE=/path/to/three.js` (fallback: `~/Code/three.js`), using its existing `build/three.module.js` and `examples/jsm/controls/OrbitControls.js`. This checkout is consumed without modification. Fonts and [Phosphor](https://phosphoricons.com/) icons are installed locally; the browser makes no external asset requests.
 
 ## Explore
 
@@ -38,3 +38,5 @@ npm run build
 ```
 
 For this session, dependencies, caches, build output and screenshots are on the external SSD. The implementation and parser tests are tracked in this repository; private plan snapshots are not tracked. Verification details live in `design-qa.md` and `docs/devlog.md`.
+
+The experimental headless portable plan contract and Go validator are documented in [contracts/plan/v0/README.md](contracts/plan/v0/README.md). They validate coherent assertions; they do not authenticate receipts or create execution authority.

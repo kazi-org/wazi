@@ -10,9 +10,9 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
   const [failed,setFailed]=useState(false);
   const [size,setSize]=useState({w:1000,h:650});
   const aspect=size.w/size.h;
-  const columnSpacing=2*Math.tan(Math.PI/9)*Math.max(25,44/aspect)*aspect/5*0.92;
   const groups = lanes.map(lane=>({...lane, tasks:tasks.filter(t=>laneFor(t)===lane.id)}));
-  const nodes = groups.flatMap((lane,col)=>lane.tasks.map((task,row)=>({task, color:lane.color, position:new THREE.Vector3((col-2)*columnSpacing, ((lane.tasks.length-1)/2-row)*3.4, Math.sin(col*1.7+row)*0.38), col, row})));
+  const columnSpacing=2*Math.tan(Math.PI/9)*Math.max(25,44/aspect)*aspect/groups.length*0.92;
+  const nodes = groups.flatMap((lane,col)=>lane.tasks.map((task,row)=>({task, color:lane.color, position:new THREE.Vector3((col-(groups.length-1)/2)*columnSpacing, ((lane.tasks.length-1)/2-row)*3.4, Math.sin(col*1.7+row)*0.38), col, row})));
   const nodeRef=useRef(nodes); nodeRef.current=nodes;
   const selection=useRef(selected);selection.current=selected;
   const linksEnabled=useRef(showLinks);linksEnabled.current=showLinks;
@@ -103,8 +103,8 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
   const connectedIds=new Set(selected?[selected,...(tasks.find(t=>t.id===selected)?.dependencies||[]),...tasks.filter(t=>t.dependencies.includes(selected)).map(t=>t.id)]:[]);
   return <div className="space" ref={container}>
     <canvas ref={canvas} aria-label="Interactive 3D task dependency map" />
-    <div className="lane-labels">{groups.map((g,i)=><div key={g.id} style={{'--lane-color':g.color}}><span className="lane-number">0{i+1}</span><strong>{g.title}</strong><span className="lane-count">{g.tasks.length}</span><small>{g.subtitle}</small></div>)}</div>
-    <div className="card-layer" ref={cardLayer}>{nodes.map(({task,color})=>{const Icon=statusIcons[task.status]||Circle;return <button data-card key={task.id} aria-label={`${task.id}: ${task.title}, ${task.status}`} aria-pressed={selected===task.id} onClick={()=>onSelect(task.id)} className={`task-card ${task.status} ${selected===task.id?'selected':''} ${selected&&!connectedIds.has(task.id)?'muted':''} ${filter!=='all'&&task.status!==filter?'filtered':''}`} style={{'--lane-color':color}}>
+    <div className="lane-labels" style={{gridTemplateColumns:`repeat(${groups.length}, minmax(0, 1fr))`}}>{groups.map((g,i)=><div key={g.id} style={{'--lane-color':g.color}}><span className="lane-number">0{i+1}</span><strong>{g.title}</strong><span className="lane-count">{g.tasks.length}</span><small>{g.subtitle}</small></div>)}</div>
+    <div className="card-layer" ref={cardLayer}>{nodes.map(({task,color})=>{const Icon=statusIcons[task.status]||Circle;const statusText=task.authoredStatusLabel||(task.status==='complete'&&task.authoredStatus==='checked'?'Marked done':task.status);return <button data-card key={task.id} aria-label={`${task.id}: ${task.title}, ${statusText}`} aria-pressed={selected===task.id} onClick={()=>onSelect(task.id)} className={`task-card ${task.status} ${selected===task.id?'selected':''} ${selected&&!connectedIds.has(task.id)?'muted':''} ${filter!=='all'&&task.status!==filter?'filtered':''}`} style={{'--lane-color':color}}>
       <div className="card-meta"><span>{task.id}</span><Icon size={14} weight={task.status==='complete'?'fill':'regular'}/></div>
       <strong>{task.title}</strong><div className="card-foot"><span>{task.owner||'Unassigned'}</span><span>{task.dependencies.length?`${task.dependencies.length} dependencies`:'Entry point'}</span></div>
     </button>})}</div>
