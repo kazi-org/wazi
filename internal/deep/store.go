@@ -631,6 +631,10 @@ func (s *Service) acquire(ctx context.Context, n string) (func(), error) {
 		if e != nil {
 			return nil, e
 		}
+		if e = f.Chmod(0600); e != nil {
+			_ = f.Close()
+			return nil, e
+		}
 		if e = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); e == nil {
 			return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); _ = f.Close() }, nil
 		}
