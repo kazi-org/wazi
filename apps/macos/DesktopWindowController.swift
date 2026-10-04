@@ -17,13 +17,25 @@ final class DesktopWindowController: NSWindowController, NSWindowDelegate, WKNav
 
     init() {
         let frame = NSRect(x: 0, y: 0, width: 1_180, height: 820)
-        let window = KeyableBorderlessWindow(contentRect: frame, styleMask: [.borderless, .resizable], backing: .buffered, defer: false)
+        let window = KeyableMainWindow(
+            contentRect: frame,
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
         window.minSize = NSSize(width: 400, height: 620)
         window.isOpaque = true
         window.backgroundColor = NSColor(calibratedRed: 0.035, green: 0.047, blue: 0.078, alpha: 1)
         window.hasShadow = true
         window.isMovableByWindowBackground = false
         window.title = "Wazi"
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
+        window.collectionBehavior = [.fullScreenPrimary]
+        for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+            window.standardWindowButton(button)?.isHidden = true
+        }
         super.init(window: window)
         window.delegate = self
         installDragMonitor()
@@ -161,9 +173,9 @@ final class DesktopWindowController: NSWindowController, NSWindowDelegate, WKNav
 
     private func setContent(_ view: NSView) {
         guard let window else { return }
-        view.frame = window.contentLayoutRect
         view.autoresizingMask = [.width, .height]
         window.contentView = view
+        view.frame = window.contentView?.bounds ?? window.contentLayoutRect
     }
 
     private func discardWebView() {
@@ -227,7 +239,7 @@ final class DesktopWindowController: NSWindowController, NSWindowDelegate, WKNav
 }
 
 @MainActor
-final class KeyableBorderlessWindow: NSWindow {
+final class KeyableMainWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 }
