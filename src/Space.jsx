@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CheckCircle, Circle, SpinnerGap, LockSimple } from '@phosphor-icons/react';
@@ -11,7 +11,8 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
   const [size,setSize]=useState({w:1000,h:650});
   const aspect=size.w/size.h;
   const groups = lanes.map(lane=>({...lane, tasks:tasks.filter(t=>laneFor(t)===lane.id)}));
-  const columnSpacing=2*Math.tan(Math.PI/9)*Math.max(25,44/aspect)*aspect/groups.length*0.92;
+  const layoutDistance=useMemo(()=>engine.current?engine.current.camera.position.distanceTo(engine.current.controls.target):Math.max(25,44/aspect),[size.w,size.h]);
+  const columnSpacing=2*Math.tan(Math.PI/9)*layoutDistance*aspect/groups.length*0.92;
   const nodes = groups.flatMap((lane,col)=>lane.tasks.map((task,row)=>({task, color:lane.color, position:new THREE.Vector3((col-(groups.length-1)/2)*columnSpacing, ((lane.tasks.length-1)/2-row)*3.4, Math.sin(col*1.7+row)*0.38), col, row})));
   const nodeRef=useRef(nodes); nodeRef.current=nodes;
   const selection=useRef(selected);selection.current=selected;

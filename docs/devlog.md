@@ -81,3 +81,21 @@ explicit. Frozen 0.0.1 specification at16b66e5 has60 neutral cases and digest
 Adapters may pin those immutable bytes; Go conformance is still pending and no
 runtime or receipt authentication is inferred. Initial remote publication must
 avoid disclosing historical local-only machine paths or agent channels.
+
+Go implementation integrated from a422484/c7cd678: embedded specification integrity,
+network-denying schema loader, bounded duplicate-key-safe JSON parsing, structural
+and semantic checks, CLI and 60-case conformance tests. `go mod tidy` resolved the
+required indirect x/text dependency with all caches on SSD; this was dependency
+resolution only, not a held build/test. Display integrated from2f7f34c: Node15/15
+passed with SSD temporary files, browser retained qualified IDs/raw source/opaque
+metadata and showed pending/0% authored progress despite reported complete,
+verified and satisfied claims. Unknown contract0.0.2 rejected; rereview shown
+as Other. Browser findings D1 end-column clipping during inspector resize and
+D2 collapsed visual acceptance newlines have tracked fix/verification rows;
+source fixes are in progress. Heavy Mac checks remain held; GitHub Linux CI
+provides scoped Go/Node/build verification and a disposable Mac verifier artifact.
+
+Initial public main is audited clean root snapshotadc4e8d; normative0.0.1 source
+is also publicly pinned atf04497a with unchanged manifestdigest7582512f. No local
+development history or agent channel is published. This necessary initial-base
+step is distinct from the upcoming reviewed implementation rebase merge.
