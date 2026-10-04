@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -107,6 +108,77 @@ func TestUnknownReceiptPreventsAutomaticResend(t *testing.T) {
 	}
 	if calls.Load() != 1 {
 		t.Fatalf("provider calls=%d", calls.Load())
+	}
+}
+
+func TestKernelLockReleasedWhenOwnerProcessExits(t *testing.T) {
+	if os.Getenv("WAZI_LOCK_CRASH_HELPER") == "1" {
+		s := &Service{dir: os.Getenv("WAZI_LOCK_CRASH_DIR")}
+		if _, err := s.acquire(context.Background(), "lifecycle"); err != nil {
+			os.Exit(2)
+		}
+		// Intentionally exit without unlocking; the kernel must release flock.
+		os.Exit(0)
+	}
+	dir := filepath.Join(os.Getenv("TMPDIR"), "wazi-deep-lock-crash-"+strings.ReplaceAll(t.Name(), "/", "_"))
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	cmd := exec.Command(os.Args[0], "-test.run=^TestKernelLockReleasedWhenOwnerProcessExits$")
+	cmd.Env = append(os.Environ(), "WAZI_LOCK_CRASH_HELPER=1", "WAZI_LOCK_CRASH_DIR="+dir)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("lock owner helper failed: %v: %s", err, output)
+	}
+	s := &Service{dir: dir}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	unlock, err := s.acquire(ctx, "lifecycle")
+	if err != nil {
+		t.Fatalf("kernel lock remained stuck after owner process exit: %v", err)
+	}
+	info, err := os.Stat(filepath.Join(dir, ".lifecycle.lock"))
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("persistent lock file mode: info=%v err=%v", info, err)
+	}
+	unlock()
+}
+
+func TestPersistentDispatchingReceiptRequiresExplicitRegenerate(t *testing.T) {
+	var calls atomic.Int32
+	dir := filepath.Join(os.Getenv("TMPDIR"), "wazi-deep-restart-"+strings.ReplaceAll(t.Name(), "/", "_"))
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	m := manifest(ContextPlanCode)
+	key, err := Key(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := New(Config{Dir: dir, MaxBytes: 8 << 20, Engine: engineFunc(func(context.Context, Manifest) (string, error) { calls.Add(1); return "unexpected", nil })})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = first.write(receipt{Key: key, Status: "dispatching", Manifest: cloneManifest(m), UpdatedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := New(Config{Dir: dir, MaxBytes: 8 << 20, Engine: engineFunc(func(context.Context, Manifest) (string, error) { calls.Add(1); return "regenerated", nil })})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = restarted.Analyze(context.Background(), m); !errors.Is(err, ErrUnknownOutcome) {
+		t.Fatalf("restart Analyze err=%v", err)
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("unknown receipt auto-dispatched %d times", calls.Load())
+	}
+	result, err := restarted.Regenerate(context.Background(), m, CostDisclosure{Summary: "explicit OpenRouter cost disclosure", Acknowledged: true})
+	if err != nil || result.Answer != "regenerated" {
+		t.Fatalf("explicit regenerate=%+v err=%v", result, err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("explicit regeneration calls=%d", calls.Load())
 	}
 }
 
