@@ -147,3 +147,10 @@ The user explicitly requested headless review and merge after being told rich Se
 Observed PASS: discovery and project/task selection; explained proposals; confirm and persisted current sidecar; dismissal; read-only source preview; manual link and reverse navigation across split plans; refresh/selection isolation; all five unavailable context sections; explicit unavailable-context and disabled-provider request messages; icon-only collapsed navigation and restored panels; desktop 1440px and narrow 390px layouts with body width equal to viewport; unsupported `rereview` visible in Other; authored Marked done remains distinct from execution evidence. No uncaught browser errors were reported. Expected request refusals returned 409. No analysis receipts or AI answers were created; no live provider was enabled. Screenshots remain private external artifacts. Rich context, actual owner lineage, live model and memory-derived persistence acceptance remain unverified/incomplete.
 
 Independent delta review passed exact `3d62e48`; final documentation receipt will receive exact-head review before guarded GitHub rebase merge. Candidate merge and landed receipts are recorded in PR #3 and the established local project channel; original full-E3 tasks remain open for the missing owner capability.
+
+## Desktop application direction — 2026-10-04
+
+User selected Swift/AppKit + WKWebView for Mac, Wails for Windows/Linux; phase1 is Mac-only. [ADR0003](adr/0003-platform-desktop-shells.md) records the decision. Existing tasks/status/history are preserved. New source work is planned, not dispatched or implemented; this planning artifact has its own independent review/merge/landed delivery. Full E3 Serenity integration remains open and does not block wrapping the truthful current observatory.
+
+### E8 -- Phase 1 native frameless Mac desktop -> docs/plans/E8-native-mac-desktop.md (0/15)
+### E9 -- Later Wails Windows/Linux delivery -> docs/plans/E9-wails-windows-linux.md (0/1)

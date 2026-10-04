@@ -1,0 +1,48 @@
+{
+  "scope": "phase1-mac-only",
+  "status": "planned-not-implemented",
+  "usecases": [
+    {
+      "id": "UC-DESK-001",
+      "name": "Launch the self-contained local app",
+      "priority": "P0",
+      "actor": "local_user",
+      "wiring_status": "PLANNED"
+    },
+    {
+      "id": "UC-DESK-002",
+      "name": "Operate the frameless observatory window",
+      "priority": "P0",
+      "actor": "local_user",
+      "wiring_status": "PLANNED"
+    },
+    {
+      "id": "UC-DESK-003",
+      "name": "Navigate selected project plan/code/context",
+      "priority": "P0",
+      "actor": "local_user",
+      "wiring_status": "PLANNED"
+    },
+    {
+      "id": "UC-DESK-004",
+      "name": "Keep source, credentials and navigation confined",
+      "priority": "P0",
+      "actor": "local_user",
+      "wiring_status": "PLANNED"
+    },
+    {
+      "id": "UC-DESK-005",
+      "name": "Recover explicitly from host/webview failure",
+      "priority": "P0",
+      "actor": "local_user",
+      "wiring_status": "PLANNED"
+    },
+    {
+      "id": "UC-DESK-006",
+      "name": "Install and verify a reproducible local bundle",
+      "priority": "P1",
+      "actor": "local_user",
+      "wiring_status": "PLANNED"
+    }
+  ]
+}
