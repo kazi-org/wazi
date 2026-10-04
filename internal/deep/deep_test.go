@@ -45,11 +45,35 @@ func service(t *testing.T, e Engine, v LineageValidator) (*Service, string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	s, err := New(Config{Dir: dir, MaxBytes: 8 << 20, Engine: e, Validator: v})
+	s, err := New(Config{Dir: dir, MaxBytes: 8 << 20, Engine: e, Validator: v, MemoryPersistenceQualified: v != nil})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return s, dir
+}
+
+func TestCompletedPlanCodeCanBeReadOffline(t *testing.T) {
+	dir := filepath.Join(os.Getenv("TMPDIR"), "wazi-deep-offline-"+strings.ReplaceAll(t.Name(), "/", "_"))
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	m := manifest(ContextPlanCode)
+	first, err := New(Config{Dir: dir, MaxBytes: 8 << 20, Engine: engineFunc(func(context.Context, Manifest) (string, error) { return "saved", nil })})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = first.Analyze(context.Background(), m); err != nil {
+		t.Fatal(err)
+	}
+	offline, err := New(Config{Dir: dir, MaxBytes: 8 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := offline.Analyze(context.Background(), m)
+	if err != nil || r.Answer != "saved" || !r.Cached {
+		t.Fatalf("offline cache=%+v err=%v", r, err)
+	}
 }
 
 func TestAnalyzeCachesOnlyCompletedResult(t *testing.T) {
@@ -130,7 +154,7 @@ func TestMemoryUnavailableHidesWithoutDeletingAndInvalidationRemovesBody(t *test
 		t.Fatal(err)
 	}
 	vOK.Store(false)
-	if _, err = s.InspectForRepository(context.Background(), r.Key, m.RepositoryID); !errors.Is(err, ErrMemoryUnavailable) {
+	if _, err = s.InspectForManifest(context.Background(), m); !errors.Is(err, ErrMemoryUnavailable) {
 		t.Fatalf("offline inspect err=%v", err)
 	}
 	stored, err := s.read(r.Key)
@@ -142,7 +166,7 @@ func TestMemoryUnavailableHidesWithoutDeletingAndInvalidationRemovesBody(t *test
 		return LineageValidation{Available: true, Valid: false}, nil
 	})
 	s.validator = v
-	if _, err = s.InspectForRepository(context.Background(), r.Key, m.RepositoryID); !errors.Is(err, ErrLineageInvalid) {
+	if _, err = s.InspectForManifest(context.Background(), m); !errors.Is(err, ErrLineageInvalid) {
 		t.Fatalf("invalid inspect err=%v", err)
 	}
 	stored, err = s.read(r.Key)

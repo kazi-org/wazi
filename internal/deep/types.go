@@ -14,12 +14,13 @@ import (
 const Model = "openai/gpt-6-luna"
 
 var (
-	ErrUnknownOutcome    = errors.New("prior provider outcome is unknown; explicit regeneration required")
-	ErrInProgress        = errors.New("an identical request is already in progress")
-	ErrCapacity          = errors.New("private analysis cache capacity would be exceeded")
-	ErrMemoryUnavailable = errors.New("memory-derived result cannot be validated while its owner seam is unavailable")
-	ErrLineageInvalid    = errors.New("memory-derived result lineage is no longer eligible or current")
-	ErrNotFound          = errors.New("analysis receipt not found")
+	ErrUnknownOutcome      = errors.New("prior provider outcome is unknown; explicit regeneration required")
+	ErrInProgress          = errors.New("an identical request is already in progress")
+	ErrCapacity            = errors.New("private analysis cache capacity would be exceeded")
+	ErrMemoryUnavailable   = errors.New("memory-derived result cannot be validated while its owner seam is unavailable")
+	ErrLineageInvalid      = errors.New("memory-derived result lineage is no longer eligible or current")
+	ErrNotFound            = errors.New("analysis receipt not found")
+	ErrProviderUnavailable = errors.New("OpenRouter is unavailable or not configured")
 )
 
 type ContextMode string
@@ -87,6 +88,7 @@ type Result struct {
 	Freshness   string    `json:"freshness"`
 	Status      string    `json:"status"`
 	Persistence bool      `json:"persistence"`
+	Cached      bool      `json:"cached"`
 }
 
 type Engine interface {
