@@ -10,6 +10,7 @@ import (
 type fixtureReader struct {
 	qualification ContractQualification
 	read          func(context.Context, Scope, Limits) (Bundle, error)
+	validate      func(context.Context, Scope, []LineageRef) (LineageValidation, error)
 	calls         int
 }
 
@@ -18,8 +19,11 @@ func (f *fixtureReader) ReadProjectContext(ctx context.Context, s Scope, l Limit
 	f.calls++
 	return f.read(ctx, s, l)
 }
-func (f *fixtureReader) ValidateLineage(context.Context, Scope, []LineageRef) (LineageValidation, error) {
-	return LineageValidation{}, errors.New("fixture lineage not configured")
+func (f *fixtureReader) ValidateLineage(ctx context.Context, scope Scope, refs []LineageRef) (LineageValidation, error) {
+	if f.validate == nil {
+		return LineageValidation{}, errors.New("fixture lineage not configured")
+	}
+	return f.validate(ctx, scope, refs)
 }
 
 func completeQualification() ContractQualification {
@@ -43,10 +47,49 @@ func TestUnqualifiedReaderReturnsHonestUnavailableWithoutCallingReader(t *testin
 	if r.calls != 0 {
 		t.Fatalf("unqualified reader called %d times", r.calls)
 	}
-	for _, name := range RequiredSections {
+	for _, name := range SectionNames() {
 		if b.Sections[name].Status != Unavailable {
 			t.Errorf("%s status = %s", name, b.Sections[name].Status)
 		}
+	}
+}
+
+func TestNoProjectMappingsStartInUnavailableState(t *testing.T) {
+	s, err := NewService(HostConfig{}, nil)
+	if err != nil {
+		t.Fatalf("NewService with no mappings: %v", err)
+	}
+	b, err := s.Read(context.Background(), "repo-stable-1")
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("Read error = %v, want unavailable", err)
+	}
+	for _, name := range SectionNames() {
+		if b.Sections[name].Status != Unavailable {
+			t.Errorf("%s status = %s", name, b.Sections[name].Status)
+		}
+	}
+}
+
+func TestLineageNegativeAndUnavailableStayDistinct(t *testing.T) {
+	r := &fixtureReader{qualification: completeQualification()}
+	s, err := NewService(fixtureConfig(), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope, ok := s.ScopeForRepository("repo-stable-1")
+	if !ok {
+		t.Fatal("mapped scope missing")
+	}
+	now := time.Now()
+	ref := LineageRef{ReferenceID: "fact-1", Kind: Fact, BrainID: scope.BrainID, AudienceID: scope.AudienceID, ProjectID: scope.ProjectID, EntityID: "entity-1", ContentDigest: DigestContent("body"), Version: "v1", ExpiresAt: now.Add(time.Second)}
+	base := LineageValidation{ValidatedAt: now, Results: []LineageResult{{ReferenceID: ref.ReferenceID, State: LineageIneligible, BrainID: ref.BrainID, AudienceID: ref.AudienceID, ProjectID: ref.ProjectID, EntityID: ref.EntityID, ContentDigest: ref.ContentDigest, Version: ref.Version, ExpiresAt: now.Add(time.Second)}}}
+	r.validate = func(context.Context, Scope, []LineageRef) (LineageValidation, error) { return base, nil }
+	if _, err := s.ValidateLineage(context.Background(), scope, []LineageRef{ref}); !errors.Is(err, ErrIneligible) {
+		t.Fatalf("negative lineage error = %v", err)
+	}
+	base.Results[0].State = LineageUnavailable
+	if _, err := s.ValidateLineage(context.Background(), scope, []LineageRef{ref}); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("unavailable lineage error = %v", err)
 	}
 }
 
@@ -55,10 +98,10 @@ func TestReadAcceptsMappedTypedFixtureAndRejectsScopeEscape(t *testing.T) {
 	r.read = func(_ context.Context, scope Scope, _ Limits) (Bundle, error) {
 		now := time.Now()
 		sections := map[SectionName]Section{}
-		for _, name := range RequiredSections {
+		for _, name := range SectionNames() {
 			sections[name] = Section{Status: Empty}
 		}
-		sections[Facts] = Section{Status: Available, Records: []Record{{ReferenceID: "fact-1", Kind: Fact, BrainID: scope.BrainID, AudienceID: scope.AudienceID, ProjectID: scope.ProjectID, EntityID: "entity-1", Content: "typed fact", ContentDigest: "sha256:abc", Version: "v2", FetchedAt: now, ExpiresAt: now.Add(30 * time.Second)}}}
+		sections[Facts] = Section{Status: Available, Records: []Record{{ReferenceID: "fact-1", Kind: Fact, BrainID: scope.BrainID, AudienceID: scope.AudienceID, ProjectID: scope.ProjectID, EntityID: "entity-1", Content: "typed fact", ContentDigest: DigestContent("typed fact"), Version: "v2", FetchedAt: now, ExpiresAt: now.Add(30 * time.Second)}}}
 		return Bundle{Scope: scope, FetchedAt: now, ValidTo: now.Add(time.Minute), Sections: sections}, nil
 	}
 	s, err := NewService(fixtureConfig(), r)
@@ -75,7 +118,7 @@ func TestReadAcceptsMappedTypedFixtureAndRejectsScopeEscape(t *testing.T) {
 	r.read = func(_ context.Context, scope Scope, _ Limits) (Bundle, error) {
 		now := time.Now()
 		sections := map[SectionName]Section{}
-		for _, name := range RequiredSections {
+		for _, name := range SectionNames() {
 			sections[name] = Section{Status: Empty}
 		}
 		sections[Decisions] = Section{Status: Available, Records: []Record{{ReferenceID: "private-other-project", Kind: Decision, BrainID: scope.BrainID, AudienceID: scope.AudienceID, ProjectID: "other-project", EntityID: "entity-1", ContentDigest: "d", Version: "v", FetchedAt: now, ExpiresAt: now.Add(time.Second)}}}
@@ -99,7 +142,7 @@ func TestSessionCancelsAndDiscardsLateResponseAfterProjectSwitch(t *testing.T) {
 		}
 		now := time.Now()
 		sections := map[SectionName]Section{}
-		for _, name := range RequiredSections {
+		for _, name := range SectionNames() {
 			sections[name] = Section{Status: Empty}
 		}
 		return Bundle{Scope: scope, FetchedAt: now, ValidTo: now.Add(time.Minute), Sections: sections}, nil

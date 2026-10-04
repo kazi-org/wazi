@@ -2,6 +2,9 @@ package context
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -24,8 +27,8 @@ func NewService(config HostConfig, reader Reader) (*Service, error) {
 	if config.MaxBodyBytes <= 0 {
 		config.MaxBodyBytes = 64 * 1024
 	}
-	if len(config.ByRepositoryID) == 0 {
-		return nil, fmt.Errorf("creating context service: no explicit repository mappings")
+	if config.MaxResponseBytes <= 0 {
+		config.MaxResponseBytes = 128 * 1024
 	}
 	copyMap := make(map[string]Mapping, len(config.ByRepositoryID))
 	for repo, m := range config.ByRepositoryID {
@@ -60,7 +63,7 @@ func (s *Service) Read(ctx context.Context, repositoryID string) (Bundle, error)
 	if !s.qualified {
 		return unavailableBundle(scope), ErrUnqualified
 	}
-	limits := Limits{Records: s.config.MaxRecords, BodyBytes: s.config.MaxBodyBytes}
+	limits := Limits{Records: s.config.MaxRecords, BodyBytes: s.config.MaxBodyBytes, ResponseBytes: s.config.MaxResponseBytes}
 	b, err := s.reader.ReadProjectContext(ctx, scope, limits)
 	if err != nil {
 		return unavailableBundle(scope), fmt.Errorf("reading scoped Serenity context: %w", err)
@@ -93,7 +96,7 @@ func (s *Service) ValidateLineage(ctx context.Context, scope Scope, refs []Linea
 	if err != nil {
 		return LineageValidation{}, fmt.Errorf("revalidating Serenity lineage: %w", err)
 	}
-	if len(v.Results) != len(refs) {
+	if v.ValidatedAt.IsZero() || v.ValidatedAt.After(time.Now()) || len(v.Results) != len(refs) {
 		return LineageValidation{}, fmt.Errorf("%w: incomplete lineage result set", ErrInvalid)
 	}
 	byID := make(map[string]LineageResult, len(v.Results))
@@ -108,8 +111,14 @@ func (s *Service) ValidateLineage(ctx context.Context, scope Scope, refs []Linea
 	}
 	for _, want := range refs {
 		got, exists := byID[want.ReferenceID]
-		if !exists || got.State != LineageEligible || got.BrainID != want.BrainID || got.AudienceID != want.AudienceID || got.ProjectID != want.ProjectID || got.EntityID != want.EntityID || got.ContentDigest != want.ContentDigest || got.Version != want.Version || got.ExpiresAt.IsZero() || !time.Now().Before(got.ExpiresAt) {
-			return v, fmt.Errorf("%w: lineage is stale or ineligible", ErrUnavailable)
+		if !exists {
+			return LineageValidation{}, fmt.Errorf("%w: missing lineage result", ErrInvalid)
+		}
+		if got.State == LineageUnavailable {
+			return LineageValidation{}, ErrUnavailable
+		}
+		if got.State != LineageEligible || got.BrainID != want.BrainID || got.AudienceID != want.AudienceID || got.ProjectID != want.ProjectID || got.EntityID != want.EntityID || got.ContentDigest != want.ContentDigest || got.Version != want.Version || got.ExpiresAt.IsZero() || !time.Now().Before(got.ExpiresAt) {
+			return LineageValidation{}, ErrIneligible
 		}
 	}
 	return v, nil
@@ -121,7 +130,13 @@ func validateBundle(scope Scope, b Bundle, lim Limits) error {
 	}
 	allowedEntities, allowedRefs := setOf(scope.EntityIDs), setOf(scope.ReferenceIDs)
 	count, bytes := 0, 0
-	for _, sectionName := range RequiredSections {
+	seenRefs := make(map[string]bool)
+	for sectionName := range b.Sections {
+		if !knownSection(sectionName) {
+			return fmt.Errorf("%w: unknown context section %q", ErrInvalid, sectionName)
+		}
+	}
+	for _, sectionName := range requiredSections {
 		section, ok := b.Sections[sectionName]
 		if !ok || (section.Status != Available && section.Status != Empty && section.Status != Unavailable) {
 			return fmt.Errorf("%w: missing or invalid section %q", ErrInvalid, sectionName)
@@ -136,6 +151,13 @@ func validateBundle(scope Scope, b Bundle, lim Limits) error {
 			if len(allowedEntities) > 0 && r.EntityID != "" && !allowedEntities[r.EntityID] || len(allowedRefs) > 0 && !allowedRefs[r.ReferenceID] {
 				return fmt.Errorf("%w: unmapped owner reference", ErrInvalid)
 			}
+			if seenRefs[r.ReferenceID] {
+				return fmt.Errorf("%w: duplicate owner reference", ErrInvalid)
+			}
+			seenRefs[r.ReferenceID] = true
+			if r.ContentDigest != DigestContent(r.Content) {
+				return fmt.Errorf("%w: record content digest mismatch", ErrInvalid)
+			}
 			count++
 			bytes += len(r.Content)
 		}
@@ -143,7 +165,30 @@ func validateBundle(scope Scope, b Bundle, lim Limits) error {
 	if count > lim.Records || bytes > lim.BodyBytes {
 		return fmt.Errorf("%w: response exceeds configured bound", ErrInvalid)
 	}
+	encoded, err := json.Marshal(b)
+	if err != nil {
+		return fmt.Errorf("%w: response cannot be encoded", ErrInvalid)
+	}
+	if len(encoded) > lim.ResponseBytes {
+		return fmt.Errorf("%w: encoded response exceeds configured bound", ErrInvalid)
+	}
 	return nil
+}
+
+// DigestContent returns the canonical SHA-256 content digest format used by
+// Wazi cache lineage. Owner adapters must verify/translate to this exact basis.
+func DigestContent(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func knownSection(s SectionName) bool {
+	for _, name := range requiredSections {
+		if name == s {
+			return true
+		}
+	}
+	return false
 }
 
 func sameScope(a, b Scope) bool {
@@ -200,8 +245,8 @@ func scopeAllows(s Scope, entity, ref string) bool {
 }
 
 func unavailableBundle(scope Scope) Bundle {
-	sections := make(map[SectionName]Section, len(RequiredSections))
-	for _, n := range RequiredSections {
+	sections := make(map[SectionName]Section, len(requiredSections))
+	for _, n := range requiredSections {
 		sections[n] = Section{Status: Unavailable}
 	}
 	return Bundle{Scope: scope, Sections: sections}
