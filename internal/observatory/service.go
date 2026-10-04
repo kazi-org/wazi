@@ -355,6 +355,22 @@ func (s *Service) Snapshot(ctx context.Context, id string) (Snapshot, error) {
 	if e != nil {
 		return Snapshot{}, e
 	}
+	if len(side.Dismissed) > 0 {
+		remaining := snap.Suggestions[:0]
+		for _, suggestion := range snap.Suggestions {
+			dismissed := false
+			for _, item := range side.Dismissed {
+				if item.PlanPath == suggestion.PlanPath && item.TaskID == suggestion.TaskID && item.Target == suggestion.Target && item.Kind == suggestion.Kind && item.BasisDigest == suggestion.BasisDigest {
+					dismissed = true
+					break
+				}
+			}
+			if !dismissed {
+				remaining = append(remaining, suggestion)
+			}
+		}
+		snap.Suggestions = remaining
+	}
 	snap.Bindings = side.Bindings
 	snap.SidecarDigest = sd
 	for i := range snap.Bindings {
