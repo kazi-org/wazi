@@ -377,6 +377,34 @@ func (s *Service) InspectForManifest(ctx context.Context, m Manifest) (Result, e
 	return result, e
 }
 
+// InspectHistoricalForRepository returns the saved answer with its original
+// plan/code basis explicitly marked historical. Memory-derived bodies still
+// require a live successful lineage revalidation before they are returned.
+func (s *Service) InspectHistoricalForRepository(ctx context.Context, key, repositoryID string) (Result, error) {
+	if repositoryID == "" || !validKey(key) {
+		return Result{}, errors.New("repository and valid cache key are required")
+	}
+	r, err := s.read(key)
+	if err != nil {
+		return Result{}, err
+	}
+	if r.Manifest.RepositoryID != repositoryID {
+		return Result{}, ErrNotFound
+	}
+	result, err := s.visible(ctx, r)
+	if err != nil {
+		return result, err
+	}
+	if r.Status == "completed" {
+		result.Cached = true
+		result.Freshness = "historical_source_snapshot"
+		if r.Manifest.ContextMode == ContextMemory {
+			result.Freshness = "historical_source_snapshot_lineage_revalidated"
+		}
+	}
+	return result, nil
+}
+
 // DeleteForRepository retains a body-free receipt tombstone to prevent accidental resend.
 func (s *Service) DeleteForRepository(ctx context.Context, key, repositoryID string) error {
 	if repositoryID == "" || !validKey(key) {
