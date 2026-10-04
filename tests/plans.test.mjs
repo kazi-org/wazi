@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { parsePlan, scanPlans } from '../scripts/plans.mjs';
 import { laneFor } from '../src/demo.mjs';
-import { looksLikePortableJson, portablePlanFromBundle, PORTABLE_CONTRACT_DIGEST, PORTABLE_CONTRACT_VERSION } from '../src/portable-plan.mjs';
+import { looksLikePortableJson, parsePortablePlanJSON, portablePlanFromBundle, PORTABLE_CONTRACT_DIGEST, PORTABLE_CONTRACT_VERSION } from '../src/portable-plan.mjs';
 
 test('parsePlan extracts skill checkbox fields, epics and stable source identity', () => {
   const markdown = `# E2 — Build the observatory
@@ -197,6 +197,20 @@ test('rejects unsupported versions and malformed portable core shapes', async ()
   const wrongRef = structuredClone(fixture);
   wrongRef.definition.tasks[0].source.ref = 'other.md';
   assert.throws(() => portablePlanFromBundle(wrongRef), /must match the plan source ref/);
+});
+
+test('rejects duplicate portable JSON object keys at every depth, including escaped collisions', () => {
+  assert.throws(() => parsePortablePlanJSON('{"contractVersion":"0.0.1","contractVersion":"0.0.1"}'), /duplicate object key/);
+  assert.throws(() => parsePortablePlanJSON('{"definition":{"tasks":[{"title":"first","title":"last"}]}}'), /duplicate object key/);
+  assert.throws(() => parsePortablePlanJSON('{"metadata":{"provider":"first","provider":"last"}}'), /duplicate object key/);
+  assert.throws(() => parsePortablePlanJSON(String.raw`{"metadata":{"provider":"first","\u0070rovider":"last"}}`), /duplicate object key/);
+  assert.throws(() => parsePortablePlanJSON(String.raw`{"metadata":{"\ud800":1,"\ud801":2}}`), /duplicate object key/);
+
+  const parsed = parsePortablePlanJSON('[1,1,"same","same",{"x":1},{"x":2}]');
+  assert.deepEqual(parsed, [1, 1, 'same', 'same', { x: 1 }, { x: 2 }]);
+  assert.throws(() => parsePortablePlanJSON(' '.repeat(4 * 1024 * 1024 + 1)), /4 MiB import limit/);
+  assert.throws(() => parsePortablePlanJSON(`${'['.repeat(257)}0${']'.repeat(257)}`), /nesting limit/);
+  assert.throws(() => parsePortablePlanJSON(`[${'0,'.repeat(200_000)}0]`), /200,000 node limit/);
 });
 
 test('scanner stops at git roots and does not invent projects for docs directories', async (t) => {

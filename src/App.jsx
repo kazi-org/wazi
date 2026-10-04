@@ -3,7 +3,7 @@ import { ArrowUpRight, ArrowsOut, ArrowsClockwise, Cube, SquaresFour, FolderSimp
 import Space from './Space.jsx';
 import { sampleProject, statusLabel, lanes, laneFor } from './demo.mjs';
 import { parsePlan } from './plan-parser.mjs';
-import { looksLikePortableJson, portablePlanFromBundle } from './portable-plan.mjs';
+import { looksLikePortableJson, parsePortablePlanJSON, portablePlanFromBundle } from './portable-plan.mjs';
 
 const normalizePlan = p => ({...p, tasks:p.tasks.map(t=>({...t, id:t.sourceId||t.id}))});
 const StatusIcon=({status,...props})=>{const Icon={complete:CheckCircle,active:SpinnerGap,blocked:LockSimple,pending:Circle}[status]||Circle;return <Icon {...props}/>;};
@@ -57,7 +57,7 @@ export default function App(){
   const addImported=(markdown,name)=>{
     if(looksLikePortableJson(markdown)){
       try{
-        const bundle=JSON.parse(String(markdown).replace(/^\uFEFF/,''));
+        const bundle=parsePortablePlanJSON(markdown);
         const imported=portablePlanFromBundle(bundle,name,`portable-${++importCount.current}`);
         setProjects(current=>[...current,imported]);selectProject(imported);setImporting(false);setImportText('');
         setNotice(`Imported ${imported.plans[0].tasks.length} tasks from ${name}. Reported execution and evidence remain unverified.`);

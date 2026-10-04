@@ -10,6 +10,110 @@ const evidenceKinds = new Set(['execution', 'check', 'review', 'landing', 'deplo
 const evidenceResults = new Set(['passed', 'failed', 'missing', 'unverified', 'stale', 'rejected', 'unknown', 'canceled', 'expired', 'unsupported', 'unavailable']);
 const evaluationOutcomes = new Set(['satisfied', 'unsatisfied', 'unknown', 'unavailable', 'stale', 'unsupported']);
 
+const MAX_PORTABLE_JSON_BYTES = 4 * 1024 * 1024;
+const MAX_PORTABLE_JSON_DEPTH = 256;
+const MAX_PORTABLE_JSON_NODES = 200_000;
+
+function normalizeObjectKey(key) {
+  let normalized = '';
+  for (let index = 0; index < key.length; index += 1) {
+    const code = key.charCodeAt(index);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = key.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        normalized += key[index] + key[index + 1];
+        index += 1;
+      } else normalized += '\ufffd';
+    } else if (code >= 0xdc00 && code <= 0xdfff) normalized += '\ufffd';
+    else normalized += key[index];
+  }
+  return normalized;
+}
+
+function assertNoDuplicateObjectKeys(text) {
+  let index = 0;
+  let nodes = 0;
+  const skipWhitespace = () => {
+    while (/\s/.test(text[index] || '')) index += 1;
+  };
+  const readString = () => {
+    const start = index;
+    index += 1;
+    while (index < text.length) {
+      const char = text[index];
+      if (char === '"') {
+        index += 1;
+        return JSON.parse(text.slice(start, index));
+      }
+      if (char === '\\') index += 2;
+      else index += 1;
+    }
+    throw new Error('Portable JSON contains an unterminated string.');
+  };
+  const parseValue = (depth, path) => {
+    if (depth > MAX_PORTABLE_JSON_DEPTH) throw new Error(`Portable JSON exceeds the nesting limit at ${path}.`);
+    nodes += 1;
+    if (nodes > MAX_PORTABLE_JSON_NODES) throw new Error('Portable JSON exceeds the 200,000 node limit.');
+    skipWhitespace();
+    if (text[index] === '"') {
+      readString();
+      return;
+    }
+    if (text[index] === '{') {
+      index += 1;
+      skipWhitespace();
+      const keys = new Set();
+      if (text[index] === '}') { index += 1; return; }
+      while (index < text.length) {
+        skipWhitespace();
+        if (text[index] !== '"') throw new Error(`Portable JSON object key expected at ${path}.`);
+        const key = normalizeObjectKey(readString());
+        if (keys.has(key)) throw new Error(`Portable JSON contains a duplicate object key at ${path}.`);
+        keys.add(key);
+        skipWhitespace();
+        if (text[index] !== ':') throw new Error(`Portable JSON colon expected at ${path}.`);
+        index += 1;
+        parseValue(depth + 1, `${path}.${JSON.stringify(key)}`);
+        skipWhitespace();
+        if (text[index] === '}') { index += 1; return; }
+        if (text[index] !== ',') throw new Error(`Portable JSON object separator expected at ${path}.`);
+        index += 1;
+      }
+      throw new Error(`Portable JSON object is unterminated at ${path}.`);
+    }
+    if (text[index] === '[') {
+      index += 1;
+      skipWhitespace();
+      if (text[index] === ']') { index += 1; return; }
+      let item = 0;
+      while (index < text.length) {
+        parseValue(depth + 1, `${path}[${item}]`);
+        item += 1;
+        skipWhitespace();
+        if (text[index] === ']') { index += 1; return; }
+        if (text[index] !== ',') throw new Error(`Portable JSON array separator expected at ${path}.`);
+        index += 1;
+      }
+      throw new Error(`Portable JSON array is unterminated at ${path}.`);
+    }
+    const start = index;
+    while (index < text.length && !/[\s,\]}]/.test(text[index])) index += 1;
+    if (index === start) throw new Error(`Portable JSON value expected at ${path}.`);
+  };
+
+  parseValue(0, '$');
+  skipWhitespace();
+  if (index !== text.length) throw new Error('Portable JSON has trailing content.');
+}
+
+export function parsePortablePlanJSON(text) {
+  if (typeof text !== 'string') throw new Error('Portable plan JSON must be text.');
+  const normalized = text.replace(/^\uFEFF/, '');
+  if (new TextEncoder().encode(normalized).byteLength > MAX_PORTABLE_JSON_BYTES) throw new Error('Portable plan JSON exceeds the 4 MiB import limit.');
+  assertNoDuplicateObjectKeys(normalized);
+  return JSON.parse(normalized);
+}
+
 function object(value, path) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${path} must be an object.`);
   return value;
