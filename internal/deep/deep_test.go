@@ -1,6 +1,7 @@
 package deep
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -35,7 +36,7 @@ func manifest(mode ContextMode) Manifest {
 	if mode == ContextMemory {
 		ctxBody := "displayed context"
 		m.ContextScope = ContextScope{RepositoryID: m.RepositoryID, BrainID: "brain", AudienceID: "owner", ProjectID: "project", EntityIDs: []string{"e1"}, ReferenceIDs: []string{"r1"}}
-		m.Context = []ContextItem{{OwnerRef: "r1", Kind: "decision", EntityID: "e1", BrainID: "brain", AudienceID: "owner", ProjectID: "project", ContentDigest: digest(ctxBody), Version: "v1", ExpiresAt: time.Now().Add(time.Hour), Body: ctxBody}}
+		m.Context = []ContextItem{{OwnerRef: "r1", Kind: "decision", EntityID: "e1", BrainID: "brain", AudienceID: "owner", ProjectID: "project", ContentDigest: "sha256:" + digest(ctxBody), Version: "v1", ExpiresAt: time.Now().Add(time.Hour), Body: ctxBody}}
 	}
 	return m
 }
@@ -60,6 +61,11 @@ func TestCompletedPlanCodeCanBeReadOffline(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	m := manifest(ContextPlanCode)
+	m.Code = nil
+	m.CodeDigest = ComputeCodeDigest(nil)
+	if _, err := Key(m); err != nil {
+		t.Fatalf("plan-only manifest rejected: %v", err)
+	}
 	first, err := New(Config{Dir: dir, MaxBytes: 8 << 20, Engine: engineFunc(func(context.Context, Manifest) (string, error) { return "saved", nil })})
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +166,7 @@ func TestPersistentDispatchingReceiptRequiresExplicitRegenerate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = first.write(receipt{Key: key, Status: "dispatching", Manifest: cloneManifest(m), UpdatedAt: time.Now()}); err != nil {
+	if err = first.write(receipt{Key: key, Status: "dispatching", Manifest: metadataManifest(m), UpdatedAt: time.Now()}); err != nil {
 		t.Fatal(err)
 	}
 	restarted, err := New(Config{Dir: dir, MaxBytes: 8 << 20, Engine: engineFunc(func(context.Context, Manifest) (string, error) { calls.Add(1); return "regenerated", nil })})
@@ -180,6 +186,71 @@ func TestPersistentDispatchingReceiptRequiresExplicitRegenerate(t *testing.T) {
 	if calls.Load() != 1 {
 		t.Fatalf("explicit regeneration calls=%d", calls.Load())
 	}
+}
+
+func TestReceiptsNeverPersistRequestBodies(t *testing.T) {
+	dir := filepath.Join(os.Getenv("TMPDIR"), "wazi-deep-redaction-"+strings.ReplaceAll(t.Name(), "/", "_"))
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	m := manifest(ContextMemory)
+	m.Question = "private-question-marker"
+	m.PlanBody = "private-plan-marker"
+	m.PlanDigest = digest(m.PlanBody)
+	m.Code[0].Body = "private-code-marker"
+	m.Code[0].SHA256 = digest(m.Code[0].Body)
+	m.CodeDigest = ComputeCodeDigest(m.Code)
+	m.Context[0].Body = "private-context-marker"
+	m.Context[0].ContentDigest = digest(m.Context[0].Body)
+	key, err := Key(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started, release := make(chan bool, 1), make(chan struct{})
+	engine := engineFunc(func(_ context.Context, received Manifest) (string, error) {
+		started <- received.Question == m.Question && received.PlanBody == m.PlanBody && received.Code[0].Body == m.Code[0].Body && received.Context[0].Body == m.Context[0].Body
+		<-release
+		return "answer without source", nil
+	})
+	validator := validatorFunc(func(context.Context, ContextScope, []ContextItem) (LineageValidation, error) {
+		return LineageValidation{Available: true, Valid: true, ValidUntil: time.Now().Add(time.Hour)}, nil
+	})
+	s, err := New(Config{Dir: dir, MaxBytes: 8 << 20, Engine: engine, Validator: validator, MemoryPersistenceQualified: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	finished := make(chan error, 1)
+	go func() { _, analyzeErr := s.Analyze(context.Background(), m); finished <- analyzeErr }()
+	if !<-started {
+		close(release)
+		t.Fatal("engine did not receive the original request bodies")
+	}
+	assertRedacted := func() {
+		t.Helper()
+		raw, e := os.ReadFile(s.filename(key))
+		if e != nil {
+			t.Fatal(e)
+		}
+		for _, marker := range []string{"private-question-marker", "private-plan-marker", "private-code-marker", "private-context-marker"} {
+			if bytes.Contains(raw, []byte(marker)) {
+				t.Fatalf("receipt persisted request body marker %q", marker)
+			}
+		}
+		saved, e := s.read(key)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if saved.Manifest.Question != "" || saved.Manifest.PlanBody != "" || saved.Manifest.Code[0].Body != "" || saved.Manifest.Context[0].Body != "" {
+			t.Fatalf("receipt kept source bodies: %+v", saved.Manifest)
+		}
+	}
+	assertRedacted()
+	close(release)
+	if err := <-finished; err != nil {
+		t.Fatal(err)
+	}
+	assertRedacted()
 }
 
 func TestCapacityAndManifestScopePreflightBeforeProvider(t *testing.T) {
@@ -244,7 +315,7 @@ func TestMemoryUnavailableHidesWithoutDeletingAndInvalidationRemovesBody(t *test
 		if !vOK.Load() {
 			return LineageValidation{Available: false}, nil
 		}
-		return LineageValidation{Available: true, Valid: true}, nil
+		return LineageValidation{Available: true, Valid: true, ValidUntil: time.Now().Add(time.Hour)}, nil
 	})
 	s, _ := service(t, engineFunc(func(context.Context, Manifest) (string, error) { return "memory answer", nil }), v)
 	m := manifest(ContextMemory)
@@ -271,6 +342,44 @@ func TestMemoryUnavailableHidesWithoutDeletingAndInvalidationRemovesBody(t *test
 	stored, err = s.read(r.Key)
 	if err != nil || stored.Answer != "" || stored.Status != "invalidated" || stored.Manifest.Context[0].Body != "" {
 		t.Fatalf("invalidated body remains: %+v err=%v", stored, err)
+	}
+}
+
+func TestMemoryExpiryDuringEnginePreventsDisplay(t *testing.T) {
+	var expired atomic.Bool
+	validator := validatorFunc(func(context.Context, ContextScope, []ContextItem) (LineageValidation, error) {
+		if expired.Load() {
+			return LineageValidation{Available: true, Valid: false, ValidUntil: time.Now().Add(-time.Second)}, nil
+		}
+		return LineageValidation{Available: true, Valid: true, ValidUntil: time.Now().Add(time.Hour)}, nil
+	})
+	started, release := make(chan struct{}), make(chan struct{})
+	s, _ := service(t, engineFunc(func(context.Context, Manifest) (string, error) {
+		close(started)
+		<-release
+		return "must not display", nil
+	}), validator)
+	m := manifest(ContextMemory)
+	key, err := Key(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type outcome struct {
+		result Result
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() { r, e := s.Analyze(context.Background(), m); done <- outcome{result: r, err: e} }()
+	<-started
+	expired.Store(true)
+	close(release)
+	got := <-done
+	if !errors.Is(got.err, ErrLineageInvalid) || got.result.Answer != "" {
+		t.Fatalf("expired result surfaced: %+v err=%v", got.result, got.err)
+	}
+	saved, err := s.read(key)
+	if err != nil || saved.Status != "invalidated" || saved.Answer != "" {
+		t.Fatalf("expired result remains cached: %+v err=%v", saved, err)
 	}
 }
 
