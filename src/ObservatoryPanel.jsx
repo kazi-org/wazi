@@ -45,14 +45,14 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
   };
   const openFile=async path=>{const lease=generation.current, fileLease=++fileGeneration.current;setFile(null);try{const value=await hostRequest('/api/file',{projectId:project.id,target:path,snapshotDigest:snapshot.snapshotDigest});if(mounted.current&&generation.current===lease&&fileGeneration.current===fileLease)setFile(value);}catch(e){if(generation.current===lease)setError(e.message);}};
   const deeper=async(mode='with-context', regenerate=false)=>{
-    const lease=++generation.current, controller=new AbortController();
+    const lease=generation.current, controller=new AbortController();
     deepController.current={controller,mode};
     setBusy(true);setDeepError('');setAnswer(null);
     try{
       const result=await hostRequest('/api/deep/answer',{...selection,question,contextMode:mode,regenerate,snapshotDigest:snapshot.snapshotDigest,contextLease:context?.leaseId},controller.signal);
       if(mounted.current&&generation.current===lease)setAnswer(result);
     }catch(e){if(generation.current===lease)setDeepError(e.name==='AbortError'?'Cancelled locally. No automatic resend will occur; inspect the receipt to establish provider outcome.':e.message);}
-    finally{if(mounted.current&&generation.current===lease)setBusy(false);}
+    finally{if(deepController.current?.controller===controller)deepController.current=null;if(mounted.current&&generation.current===lease)setBusy(false);}
   };
   return <>
     <section className="inspector-section"><h3>CODE & TEST LINKS</h3><button onClick={()=>setRefresh(value=>value+1)}>Refresh analysis & context</button>

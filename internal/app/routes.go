@@ -73,13 +73,20 @@ func (a *Routes) Handle(w http.ResponseWriter, r *http.Request) bool {
 	}
 	switch r.URL.Path {
 	case "/api/context":
+		a.mu.Lock()
+		a.leases = nil
+		a.mu.Unlock()
 		if a.Context == nil {
 			replyJSON(w, unavailable("No qualified Serenity owner reader configured."))
 			return true
 		}
 		bundle, readErr := a.Context.Read(ctx, snapshot.RepositoryID)
 		if readErr != nil {
-			replyJSON(w, unavailable("The scoped Serenity owner read API is unavailable or unqualified."))
+			view := unavailable("The scoped Serenity owner read API is unavailable or unqualified.")
+			if bundle.Scope.ProjectID != "" {
+				view["scope"] = map[string]string{"projectId": bundle.Scope.ProjectID, "audience": bundle.Scope.AudienceID}
+			}
+			replyJSON(w, view)
 			return true
 		}
 		token, err := observatory.RandomCapability()

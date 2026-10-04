@@ -5,6 +5,7 @@ import (
 	"errors"
 	brain "github.com/kazi-org/wazi/internal/context"
 	"github.com/kazi-org/wazi/internal/deep"
+	"time"
 )
 
 // LineageAdapter never upgrades a fixture contract to Serenity owner authority.
@@ -19,12 +20,18 @@ func (a LineageAdapter) ValidateLineage(ctx context.Context, scope deep.ContextS
 	for _, item := range items {
 		refs = append(refs, brain.LineageRef{ReferenceID: item.OwnerRef, Kind: brain.RecordKind(item.Kind), EntityID: item.EntityID, BrainID: item.BrainID, AudienceID: item.AudienceID, ProjectID: item.ProjectID, ContentDigest: item.ContentDigest, Version: item.Version, ExpiresAt: item.ExpiresAt})
 	}
-	_, err := a.Service.ValidateLineage(ctx, ownerScope, refs)
+	validation, err := a.Service.ValidateLineage(ctx, ownerScope, refs)
 	if errors.Is(err, brain.ErrIneligible) || errors.Is(err, brain.ErrInvalid) {
 		return deep.LineageValidation{Available: true, Valid: false}, deep.ErrLineageInvalid
 	}
 	if err != nil {
 		return deep.LineageValidation{Available: false}, deep.ErrMemoryUnavailable
 	}
-	return deep.LineageValidation{Available: true, Valid: true}, nil
+	until := time.Now().Add(time.Minute)
+	for _, result := range validation.Results {
+		if result.ExpiresAt.Before(until) {
+			until = result.ExpiresAt
+		}
+	}
+	return deep.LineageValidation{Available: true, Valid: true, ValidUntil: until}, nil
 }
