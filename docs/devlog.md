@@ -135,3 +135,14 @@ BLOCKED P1/G2 review proof binding and P2/G3 browser duplicate JSON keys. Go rej
 duplicate keys, but JSON.parse silently selected the last authored title; display
 import must reject duplicates before conversion. G3 fix/verify assigned to the
 UI lane and joined to exact corrected re-review. No other scoped blocker found.
+
+G2 independent correction review closed the wrong-subject finding at0244526,
+confirming60cases, audit-only rejection, subject mismatch and valid-proof ordering.
+G3 browser fix79a4acc scans decoded keys (including escaped and surrogate-equivalent
+names) before JSON.parse; bounds match Go4MiB/depth256/200000values. Node16 tests
+pass. Chrome duplicate-title import now rejects without replacing the current
+selection; normal valid import still works and no new console error appears.
+Final integrated CI and independent joint re-review remain required.
+
+CI37185145653 passes public357a806 with both G2/G3 corrections (Go/60fixtures,
+Node16 and production build). Joint independent exact-head re-review is next.
