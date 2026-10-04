@@ -86,7 +86,8 @@ export default function App(){
   const collapseInspector=()=>{setInspectorExpanded(false);requestAnimationFrame(()=>{[...document.querySelectorAll('.inspector-toggle-inline,.inspector-toggle-rail button')].find(el=>el.getClientRects().length)?.focus();});};
   const localProjects=projects.filter(p=>!p.sample);
   const matches=localProjects.filter(p=>p.name.toLowerCase().includes(query.toLowerCase()));
-  return <div className="app-shell">
+  return <div className={`app-shell ${getDesktopBridge(window)?'native-desktop':''}`}>
+    <DesktopChrome/>
     <aside role={workspaceOpen?'dialog':undefined} aria-modal={workspaceOpen||undefined} aria-label="Workspace" className={`sidebar ${workspaceExpanded?'expanded':'compact'} ${workspaceOpen?'open':''}`}>
       <a className="brand" href="#" aria-label="Wazi plan observatory" title="Wazi plan observatory" onClick={e=>e.preventDefault()}><Planet size={30} weight="duotone"/><span>wazi<span className="brand-dot">.</span></span><small>PLAN OBSERVATORY</small></a>
       <div className="workspace-heading"><span>YOUR WORKSPACE</span><div className="workspace-heading-actions"><button className="icon-btn sidebar-expand-toggle" aria-label={workspaceExpanded?'Collapse project sidebar':'Expand project sidebar'} title={workspaceExpanded?'Collapse project sidebar':'Expand project sidebar'} aria-expanded={workspaceExpanded} aria-controls="project-navigation" onClick={()=>setWorkspaceExpanded(value=>!value)}>{workspaceExpanded?<CaretLeft size={16}/>:<CaretRight size={16}/>}</button><button className="icon-btn" aria-label="Refresh local projects" title="Refresh local projects" onClick={loadPlans}><ArrowsClockwise size={15} className={loading?'spin':''}/></button></div></div>

@@ -25,6 +25,8 @@ def digest(path):
 
 def assemble(repo, output, host, shell, assets, cache, sign=True):
     repo, output, cache = repo.resolve(), output.resolve(), cache.resolve()
+    if any(p.is_symlink() for p in assets.rglob('*')):
+        raise ValueError('frontend assets must not contain symbolic links')
     if output.exists():
         raise ValueError('output must be a new directory; preserve existing bundles')
     for p in [host, shell, assets / 'index.html']:
@@ -63,6 +65,15 @@ def assemble(repo, output, host, shell, assets, cache, sign=True):
     for relative in ['scripts/host-bridge.mjs', 'scripts/plans.mjs', 'src/plan-parser.mjs']:
         shutil.copy2(repo / relative, resources / 'parser' / relative)
     shutil.copytree(assets, resources / 'web', symlinks=False)
+    for package in ['react', 'react-dom', 'scheduler', '@phosphor-icons/react', '@fontsource-variable/manrope', '@fontsource/ibm-plex-mono']:
+        license_file = repo / 'node_modules' / package / 'LICENSE'
+        if not license_file.is_file():
+            raise ValueError('runtime dependency license missing: ' + package)
+        shutil.copy2(license_file, resources / 'notices' / (package.replace('/', '-') + '-LICENSE'))
+    three_source = Path(os.environ.get('THREE_JS_SOURCE', str(repo / '.artifacts/three')))
+    if not (three_source / 'LICENSE').is_file():
+        raise ValueError('Three.js license missing; configure THREE_JS_SOURCE')
+    shutil.copy2(three_source / 'LICENSE', resources / 'notices/Three-LICENSE')
     for name in ['LICENSE', 'THIRD_PARTY_NOTICES.md']:
         if (repo / name).is_file():
             shutil.copy2(repo / name, resources / 'notices' / name)
