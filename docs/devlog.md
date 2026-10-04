@@ -174,3 +174,7 @@ retrieval, commands and trust limits. Original local history was preserved on
 archive/local-main-pre-public-20261004; local main tracks the public landing and
 its preview is open. E7 is complete; broader E3 observatory runtime remains future
 work. No production/provider/deployment or consumer authentication claim.
+
+## E3 corrected source review receipt
+
+Independent reviewer `/root/review` passed exact `88bee528e840c9d2c52ff8bf64831d0dad2f63a1` with a clean detached review checkout. R01 was withdrawn: existing App normalization already aligned browser task IDs; host normalization is now explicit. R02-R09 are fixed; no new verified source blocker was found in the bounded review. CI [37192695341](https://github.com/kazi-org/wazi/actions/runs/37192695341) passed at that head. Full E3 acceptance remains blocked by missing qualified Serenity owner reader/lineage APIs and Chrome `ERR_BLOCKED_BY_CLIENT`. T3.8, merge and landed verification are unrun; PR #3 remains draft. Owned preview stopped; unmerged SSD worktrees are retained for resumption. No provider request, release or deployment occurred.
