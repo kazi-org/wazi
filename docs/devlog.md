@@ -107,7 +107,7 @@ specification bytes. CI run37184251198 passed at publice7ed7b8: Go API/CLI tests
 SHA256caa915df2bc1f08f495ec7b452bf7bbe9e67edd2e1c2f350c71ac043c5688100
 ran offline with unreachable proxies: version/fixtures/valid pass, invalid review
 and wrong digest fail with exit2, authorityAuthenticated remains false. D1/D2
-fixes04d8c08/1b4e47e verified in Chrome: desktop panels resize with final lane
+fixes04d8c08/ba7da1e verified in Chrome: desktop panels resize with final lane
 visible, Reset/Map return coherent fit,390px no overflow, acceptance pre-wrap,
 opaque records preserved, no console errors. Public PR1 is draft pending exact
 integrated independent review; no branch protections/rulesets exist, but both
