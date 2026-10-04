@@ -9,18 +9,19 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
   const [error,setError] = useState(''), [busy,setBusy] = useState(false);
   const [question,setQuestion] = useState('What should I check next for this task?');
   const [answer,setAnswer] = useState(null), [deepError,setDeepError] = useState('');
-  const [target,setTarget] = useState(''), [file,setFile] = useState(null);
+  const [target,setTarget] = useState(''), [file,setFile] = useState(null), [refresh,setRefresh] = useState(0), [saved,setSaved] = useState([]);
   const generation = useRef(0);
   const mounted = useRef(true);
   useEffect(()=>{mounted.current=true;return ()=>{mounted.current=false;};},[]);
   useEffect(()=>{
     const lease=++generation.current, controller=new AbortController();
-    setSnapshot(null);setContext(null);setAnswer(null);setFile(null);setError('');setDeepError('');setBusy(false);
+    setSnapshot(null);setContext(null);setAnswer(null);setFile(null);setSaved([]);setError('');setDeepError('');setBusy(false);
     if(!project.hosted)return ()=>controller.abort();
     hostRequest('/api/project',{projectId:project.id},controller.signal).then(value=>{if(generation.current===lease)setSnapshot(value);}).catch(e=>{if(e.name!=='AbortError'&&generation.current===lease)setError(e.message);});
     hostRequest('/api/context',{projectId:project.id},controller.signal).then(value=>{if(generation.current===lease)setContext(value);}).catch(e=>{if(e.name!=='AbortError'&&generation.current===lease)setContext({unavailable:e.message});});
+    hostRequest('/api/deep/list',{projectId:project.id},controller.signal).then(value=>{if(generation.current===lease)setSaved(value.results||[]);}).catch(()=>{});
     return ()=>{controller.abort();};
-  },[project.id]);
+  },[project.id,refresh]);
   useEffect(()=>{setAnswer(null);setDeepError('');setBusy(false);},[plan.path,task.id]);
   useEffect(()=>{
     if(!context?.expiresAt)return;
@@ -51,7 +52,7 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
     finally{if(mounted.current&&generation.current===lease)setBusy(false);}
   };
   return <>
-    <section className="inspector-section"><h3>CODE & TEST LINKS</h3>
+    <section className="inspector-section"><h3>CODE & TEST LINKS</h3><button onClick={()=>setRefresh(value=>value+1)}>Refresh analysis & context</button>
       {!snapshot&&!error&&<p className="muted-copy">Analyzing this selected project…</p>}
       {error&&<p role="status" className="observatory-error">{error}</p>}
       {snapshot&&<><p className="muted-copy">{snapshot.files?.length||0} bounded local files · presence is not qualified completion.</p>
@@ -71,8 +72,9 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
       <label className="observatory-label">Your question<textarea value={question} onChange={e=>setQuestion(e.target.value)} maxLength={2000}/></label>
       <button disabled={busy||!snapshot||!question.trim()} onClick={()=>deeper()}>Dig deeper{busy?' · requesting…':''}</button>
       <button disabled={busy||!snapshot||!question.trim()} onClick={()=>deeper('plan-code-only')}>Plan/code only · omit brain context</button>
+      {saved.filter(item=>item.taskRef===`${plan.path}#${task.id}`).map(item=><div className="saved-answer" key={item.key}><small>{item.status} · saved receipt · {item.createdAt||'completion time unavailable'}</small><button onClick={async()=>{try{const result=await hostRequest('/api/deep/inspect',{...selection,key:item.key});setAnswer({...result,historical:true});}catch(e){setDeepError(e.message);}}}>Inspect saved answer</button><button onClick={async()=>{try{await hostRequest('/api/deep/delete',{...selection,key:item.key});setSaved(current=>current.filter(other=>other.key!==item.key));setAnswer(null);}catch(e){setDeepError(e.message);}}}>Delete receipt</button></div>)}
       {deepError&&<p role="status" className="observatory-error">{deepError}</p>}
-      {answer&&<div className="deep-answer"><small>{answer.status||'Completed'} · {answer.cached?'Reused identical inputs':'New answer'} · {answer.persistence||'private persistence qualification unavailable'}</small><p>{answer.answer||answer.body||answer.message}</p>{answer.key&&<button onClick={async()=>{try{await hostRequest('/api/deep/delete',{key:answer.key,...selection});setAnswer(null);}catch(e){setDeepError(e.message);}}}>Delete saved answer</button>}<button disabled={busy} onClick={()=>deeper('with-context',true)}>Regenerate · may incur a new charge</button></div>}
+      {answer&&<div className="deep-answer"><small>{answer.historical?'Historical source snapshot':answer.status||'Completed'} · {answer.cached?'Reused identical inputs':'New answer'} · {answer.persistence?'Saved privately':'Session only'}</small><p>{answer.answer||answer.body||answer.message}</p>{answer.key&&<button onClick={async()=>{try{await hostRequest('/api/deep/delete',{key:answer.key,...selection});setAnswer(null);}catch(e){setDeepError(e.message);}}}>Delete saved answer</button>}<button disabled={busy} onClick={()=>deeper('with-context',true)}>Regenerate · may incur a new charge</button></div>}
     </section>
   </>;
 }

@@ -70,3 +70,6 @@
 .source-preview strong,.source-preview small {display:block;overflow-wrap:anywhere;font-size:11px}
 .source-preview pre {max-height:300px;overflow:auto;font-size:10px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
 .source-link {text-align:left;overflow-wrap:anywhere}
+.saved-answer {padding:8px 0;border-bottom:1px solid #e5e9e7;font-size:11px}
+.saved-answer small {display:block;color:#67766f}
+.saved-answer button {border:1px solid #dbe4df;background:#f3f7f4;border-radius:7px;padding:7px;margin:4px;font:inherit;cursor:pointer}

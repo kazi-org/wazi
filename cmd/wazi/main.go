@@ -11,6 +11,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/kazi-org/wazi/internal/app"
+	brain "github.com/kazi-org/wazi/internal/context"
+	"github.com/kazi-org/wazi/internal/deep"
 	"github.com/kazi-org/wazi/internal/observatory"
 )
 
@@ -20,6 +23,8 @@ func main() {
 	data := flag.String("data", filepath.Join(os.Getenv("HOME"), ".local", "share", "wazi"), "private app data directory")
 	port := flag.Int("port", 0, "loopback port (0 selects an available port)")
 	snapshotID := flag.String("snapshot", "", "print selected project snapshot and exit")
+	enableAI := flag.Bool("enable-openrouter", false, "enable explicit user-click requests with WAZI_OPENROUTER_KEY; may incur charges")
+	contextMap := flag.String("context-map", "", "private JSON repository-to-brain scope configuration; no reader is qualified by this flag")
 	flag.Parse()
 	absRoot, e := filepath.Abs(*root)
 	check(e)

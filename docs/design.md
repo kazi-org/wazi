@@ -60,3 +60,11 @@ implementation fallback. Core typed dependency predicates are never inferred
 from the visual lane. Local Markdown discovery remains the existing Node/Vite
 prototype; this package is not the future Go-host migration or an implementation
 of ADR 0001's provider/context/cache gates.
+
+## Go observatory implementation boundaries
+
+The local host coordinates plan discovery through the existing JavaScript parser seam, keeping authored metadata and unsupported stages intact. Discovery reads plans; source analysis starts only for explicitly selected projects. Repository identity is application-owned and distinct from filesystem locators. Confirmed task links live in a versioned sidecar with source digests and concurrent-write checks; they establish source presence and freshness, never qualified completion. The inspector integrates proposals, bounded read-only source previews, reverse task links and scoped context inside the existing collapsible layout.
+
+The host constructs analysis inputs from current source snapshots and a leased copy of the exact context displayed by the browser. Browser payloads carry selection identifiers and explicit intent, not authoritative source bodies or credentials. Context uses explicit repository/brain/audience/project mappings and a qualified owner reader; an injected test reader does not qualify the actual owner API. All typed sections remain visibly unavailable when that reader is absent.
+
+Private result persistence separates plan/code-only input from memory-derived input. Memory-derived display and reuse requires current lineage eligibility; unreachable validation hides bodies, while negative eligibility and expiry invalidate them. Persistent dispatch receipts prevent automatic resend after uncertain outcomes. Regeneration requires fresh host-qualified inputs and an explicit cost acknowledgement. These boundaries are independent of the frozen portable plan contract.
