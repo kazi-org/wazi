@@ -4,6 +4,7 @@ import Foundation
 
 @main
 struct WaziDesktopApplication {
+    @MainActor
     static func main() {
         if CommandLine.arguments.contains("--self-test") {
             do {
@@ -12,6 +13,17 @@ struct WaziDesktopApplication {
                 exit(EXIT_SUCCESS)
             } catch {
                 fputs("Wazi native contract check failed: \(error)\n", stderr)
+                exit(EXIT_FAILURE)
+            }
+        }
+
+        if CommandLine.arguments.contains("--supervisor-test") {
+            do {
+                try DesktopSupervisorHarness.run()
+                print("Wazi supervisor lifecycle checks passed")
+                exit(EXIT_SUCCESS)
+            } catch {
+                fputs("Wazi supervisor lifecycle check failed\n", stderr)
                 exit(EXIT_FAILURE)
             }
         }
