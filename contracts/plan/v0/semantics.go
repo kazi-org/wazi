@@ -164,7 +164,6 @@ func semanticValidate(document any, result *Result) {
 	}
 	for i, task := range tasks {
 		tid := str(get(task, "id"))
-		reference := get(task, "executionUnit")
 		referenceID := str(get(task, "executionUnitId"))
 		if referenceID == "" {
 			if _, covered := taskUnit[tid]; covered {
