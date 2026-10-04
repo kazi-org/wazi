@@ -74,3 +74,9 @@ Candidate delivery decision: the user's explicit headless-review-and-merge instr
 ## Accepted desktop direction — planning only
 
 [ADR0003](adr/0003-platform-desktop-shells.md) selects a Swift/AppKit + WKWebView Mac shell for phase1 and Wails for later Windows/Linux. Preserve the shared Go host and React/Three.js view. The native shell owns only window/lifecycle, packages the Go host and pinned Node/parser/assets, and loads the owned loopback origin with existing session protections. No native title bar/browser chrome; dedicated drag and accessible custom controls preserve canvas interaction. App-private persistence stays Go-owned. Runtime/native qualification remains the checkable E8 plan; no application implementation or release was performed by this planning pass.
+
+## Native Mac shell implementation (E8)
+
+The desktop surface reuses the React/Three.js app inside a nonpersistent WKWebView. AppKit owns its single window, menus, read-only file chooser and host lifetime. The public full-size-content window hides its title, titlebar separator and standard buttons; web controls retain the dedicated 34px strip. Native messages accept only exact named window actions from the owned main frame at the pinned host origin. A fresh nonce/readiness protocol identifies the bundled Go process; closing the app closes its parent-watch pipe. Startup and content failure replace the web view with an explicit recovery panel.
+
+A pure borderless window rendered correctly, but native pointer automation could not locate its window; the public hidden-titlebar window is the native proof fallback. Actual runtime matrix and remaining acceptance gates are recorded in the E8 plan. The portable contract and configured Three.js source dependency are unchanged. Confirmed link removal uses the existing private versioned sidecar CAS seam and leaves authored source files unchanged.
