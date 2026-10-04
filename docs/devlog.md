@@ -112,3 +112,11 @@ visible, Reset/Map return coherent fit,390px no overflow, acceptance pre-wrap,
 opaque records preserved, no console errors. Public PR1 is draft pending exact
 integrated independent review; no branch protections/rulesets exist, but both
 scoped checks are required by this delivery. Heavy Mac builds stayed held.
+
+Independent pre-merge probe G2: a review for a different head/base could lend
+independence to a current review without proof. The existing CI binary accepted
+that mixed bundle because proof selection did not apply current binding checks.
+The coordinator initial audit-only probe altered a check instead of the review
+and was invalid as a counterexample; independent review confirmed audit-only
+review proof is already rejected. Tracked separate fix/verify/re-review tasks; frozen0.0.1 bytes remain
+unchanged and merge waits for corrected conformance and independent review.

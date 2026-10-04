@@ -2,6 +2,7 @@ package v0
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -104,4 +105,170 @@ func TestSafeSourceRef(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIndependentApprovalDoesNotBorrowAuditOrMismatchedProof(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{name: "audit previous attempt", mutate: func(proof map[string]any) {
+			proof["auditOnly"] = true
+			proof["attemptId"] = "example:plan:A-old"
+			proof["planRevision"] = "r0"
+			proof["planDigest"] = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+		}},
+		{name: "stale attempt", mutate: func(proof map[string]any) {
+			proof["attemptId"] = "example:plan:A-old"
+		}},
+		{name: "stale revision", mutate: func(proof map[string]any) {
+			proof["planRevision"] = "r0"
+			proof["planDigest"] = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+		}},
+		{name: "wrong task", mutate: func(proof map[string]any) {
+			proof["taskId"] = "example:plan:T4"
+			proof["attemptId"] = "example:plan:A4"
+		}},
+		{name: "wrong policy", mutate: func(proof map[string]any) {
+			proof["policyRevision"] = "other-policy/1"
+		}},
+		{name: "wrong head and base", mutate: func(proof map[string]any) {
+			proof["subject"].(map[string]any)["head"] = "different-head"
+			proof["subject"].(map[string]any)["base"] = "different-base"
+			proof["independence"] = map[string]any{"mode": "contributors"}
+			proof["contributors"] = []any{"example:author"}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bundle := authorityBundle(t)
+			proof, currentID, evaluation := splitCurrentIndependence(t, bundle)
+			proof["id"] = "example:plan:EVproof"
+			tc.mutate(proof)
+			prependEvidence(bundle, proof)
+			delete(currentProof(bundle, currentID), "independence")
+			setEvaluationEvidence(evaluation, str(proof["id"]), currentID)
+
+			result := Validate(marshalBundle(t, bundle))
+			if result.Valid || !hasFinding(result, "independence_missing") {
+				t.Fatalf("mismatched proof rescued current review: valid=%t findings=%+v", result.Valid, result.Findings)
+			}
+		})
+	}
+}
+
+func TestIndependentApprovalSelectsAnyQualifyingCurrentProof(t *testing.T) {
+	t.Run("audit proof first, valid current proof after", func(t *testing.T) {
+		bundle := authorityBundle(t)
+		proof, currentID, evaluation := splitCurrentIndependence(t, bundle)
+		proof["id"] = "example:plan:EVaudit"
+		proof["auditOnly"] = true
+		proof["attemptId"] = "example:plan:A-old"
+		proof["planRevision"] = "r0"
+		proof["planDigest"] = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+		prependEvidence(bundle, proof)
+		setEvaluationEvidence(evaluation, str(proof["id"]), currentID)
+
+		result := Validate(marshalBundle(t, bundle))
+		if !result.Valid {
+			t.Fatalf("valid current proof after audit evidence failed: %+v", result.Findings)
+		}
+	})
+
+	t.Run("earlier invalid current proof, later valid proof", func(t *testing.T) {
+		bundle := authorityBundle(t)
+		proof, currentID, evaluation := splitCurrentIndependence(t, bundle)
+		proof["id"] = "example:plan:EVsingular"
+		proof["independence"] = map[string]any{"mode": "singular"}
+		prependEvidence(bundle, proof)
+		setEvaluationEvidence(evaluation, str(proof["id"]), currentID)
+
+		result := Validate(marshalBundle(t, bundle))
+		if !result.Valid {
+			t.Fatalf("valid current proof after invalid proof failed: %+v", result.Findings)
+		}
+	})
+}
+
+func authorityBundle(t *testing.T) map[string]any {
+	t.Helper()
+	data, err := FixtureData("fixtures/valid/authority-attested-independence.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bundle map[string]any
+	if err := json.Unmarshal(data, &bundle); err != nil {
+		t.Fatal(err)
+	}
+	return bundle
+}
+
+func splitCurrentIndependence(t *testing.T, bundle map[string]any) (map[string]any, string, map[string]any) {
+	t.Helper()
+	var evaluation map[string]any
+	for _, value := range array(get(bundle, "evaluations")) {
+		candidate := object(value)
+		if str(get(candidate, "requirementId")) == "example:plan:R3" {
+			evaluation = candidate
+			break
+		}
+	}
+	if evaluation == nil {
+		t.Fatal("independent-approval evaluation missing from fixture")
+	}
+	currentID := "example:plan:EV3"
+	var proof map[string]any
+	for _, value := range array(get(bundle, "evidence")) {
+		candidate := object(value)
+		if str(get(candidate, "id")) == currentID {
+			encoded, err := json.Marshal(candidate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(encoded, &proof); err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
+	if proof == nil {
+		t.Fatal("current review evidence missing from fixture")
+	}
+	return proof, currentID, evaluation
+}
+
+func currentProof(bundle map[string]any, id string) map[string]any {
+	for _, value := range array(get(bundle, "evidence")) {
+		if str(get(value, "id")) == id {
+			return object(value)
+		}
+	}
+	return nil
+}
+
+func prependEvidence(bundle map[string]any, evidence map[string]any) {
+	all := array(get(bundle, "evidence"))
+	bundle["evidence"] = append([]any{evidence}, all...)
+}
+
+func setEvaluationEvidence(evaluation map[string]any, proofID, currentID string) {
+	evaluation["evidenceIds"] = []any{proofID, currentID}
+}
+
+func marshalBundle(t *testing.T, bundle map[string]any) []byte {
+	t.Helper()
+	data, err := json.Marshal(bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func hasFinding(result Result, code string) bool {
+	for _, finding := range result.Findings {
+		if finding.Code == code {
+			return true
+		}
+	}
+	return false
 }
