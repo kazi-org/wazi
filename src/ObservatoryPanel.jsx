@@ -10,11 +10,12 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
   const [question,setQuestion] = useState('What should I check next for this task?');
   const [answer,setAnswer] = useState(null), [deepError,setDeepError] = useState('');
   const [target,setTarget] = useState(''), [file,setFile] = useState(null), [refresh,setRefresh] = useState(0), [saved,setSaved] = useState([]);
-  const generation = useRef(0);
+  const generation = useRef(0), fileGeneration = useRef(0), deepController = useRef(null);
   const mounted = useRef(true);
-  useEffect(()=>{mounted.current=true;return ()=>{mounted.current=false;};},[]);
+  useEffect(()=>{mounted.current=true;return ()=>{mounted.current=false;deepController.current?.controller.abort();};},[]);
   useEffect(()=>{
     const lease=++generation.current, controller=new AbortController();
+    ++fileGeneration.current;deepController.current?.controller.abort();
     setSnapshot(null);setContext(null);setAnswer(null);setFile(null);setSaved([]);setError('');setDeepError('');setBusy(false);
     if(!project.hosted)return ()=>controller.abort();
     hostRequest('/api/project',{projectId:project.id},controller.signal).then(value=>{if(generation.current===lease)setSnapshot(value);}).catch(e=>{if(e.name!=='AbortError'&&generation.current===lease)setError(e.message);});
@@ -26,9 +27,10 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
   useEffect(()=>{
     if(!context?.expiresAt)return;
     const delay=Math.max(0,new Date(context.expiresAt).getTime()-Date.now());
-    const timer=setTimeout(()=>{setContext({unavailable:'Context lease expired. Refresh before using this context.'});setAnswer(null);},delay);
+    const timer=setTimeout(()=>{setContext({unavailable:'Context lease expired. Refresh before using this context.'});if(deepController.current?.mode==='with-context'){++generation.current;deepController.current.controller.abort();setBusy(false);setDeepError('Context expired during the request. Its provider outcome may be uncertain; inspect the saved receipt.');}setAnswer(current=>current?.memoryDerived?null:current);},delay);
     return ()=>clearTimeout(timer);
   },[context]);
+  useEffect(()=>{if(!answer?.memoryDerived||!answer.visibleUntil)return;const timer=setTimeout(()=>setAnswer(null),Math.max(0,new Date(answer.visibleUntil).getTime()-Date.now()));return ()=>clearTimeout(timer);},[answer]);
   if(!project.hosted)return <section className="inspector-section"><h3>PROJECT OBSERVATORY</h3><p className="muted-copy">Select a project discovered by the Go host to analyze local code and inspect scoped context.</p></section>;
   const selection={projectId:project.id,planPath:plan.path,taskId:task.id};
   const proposals=(snapshot?.suggestions||[]).filter(link=>link.planPath===plan.path&&link.taskId===task.id);
@@ -36,19 +38,20 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
   const bind=async(link,action)=>{
     const lease=generation.current;setError('');
     try{
-      await hostRequest('/api/bindings',{...selection,target:link.target,kind:link.kind||'file',basisDigest:link.basisDigest||snapshot.snapshotDigest,sidecarDigest:snapshot.sidecarDigest,action});
+      await hostRequest('/api/bindings',{...selection,target:link.target,kind:link.kind||'code',basisDigest:link.basisDigest||snapshot.snapshotDigest,sidecarDigest:snapshot.sidecarDigest,action});
       const next=await hostRequest('/api/project',{projectId:project.id});
       if(mounted.current&&generation.current===lease){setSnapshot(next);setTarget('');}
     }catch(e){if(generation.current===lease)setError(e.message);}
   };
-  const openFile=async path=>{const lease=generation.current;setFile(null);try{const value=await hostRequest('/api/file',{projectId:project.id,target:path,snapshotDigest:snapshot.snapshotDigest});if(mounted.current&&generation.current===lease)setFile(value);}catch(e){if(generation.current===lease)setError(e.message);}};
+  const openFile=async path=>{const lease=generation.current, fileLease=++fileGeneration.current;setFile(null);try{const value=await hostRequest('/api/file',{projectId:project.id,target:path,snapshotDigest:snapshot.snapshotDigest});if(mounted.current&&generation.current===lease&&fileGeneration.current===fileLease)setFile(value);}catch(e){if(generation.current===lease)setError(e.message);}};
   const deeper=async(mode='with-context', regenerate=false)=>{
-    const lease=++generation.current;
+    const lease=++generation.current, controller=new AbortController();
+    deepController.current={controller,mode};
     setBusy(true);setDeepError('');setAnswer(null);
     try{
-      const result=await hostRequest('/api/deep/answer',{...selection,question,contextMode:mode,regenerate,snapshotDigest:snapshot.snapshotDigest,contextLease:context?.leaseId});
+      const result=await hostRequest('/api/deep/answer',{...selection,question,contextMode:mode,regenerate,snapshotDigest:snapshot.snapshotDigest,contextLease:context?.leaseId},controller.signal);
       if(mounted.current&&generation.current===lease)setAnswer(result);
-    }catch(e){if(generation.current===lease)setDeepError(e.message);}
+    }catch(e){if(generation.current===lease)setDeepError(e.name==='AbortError'?'Cancelled locally. No automatic resend will occur; inspect the receipt to establish provider outcome.':e.message);}
     finally{if(mounted.current&&generation.current===lease)setBusy(false);}
   };
   return <>
@@ -56,12 +59,12 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
       {!snapshot&&!error&&<p className="muted-copy">Analyzing this selected project…</p>}
       {error&&<p role="status" className="observatory-error">{error}</p>}
       {snapshot&&<><p className="muted-copy">{snapshot.files?.length||0} bounded local files · presence is not qualified completion.</p>
-        {(snapshot.analysis?.warnings||[]).map((warning,i)=><p key={i} className="muted-copy">{warning}</p>)}
+        {(snapshot.warnings||[]).map((warning,i)=><p key={i} className="muted-copy">{warning}</p>)}
         {bindings.map((link,i)=><div className="link-candidate" key={`b${i}`}><button className="source-link" onClick={()=>openFile(link.target)}>{link.target}</button><small>Confirmed · {link.kind} · {link.freshness||'revalidate against current source'}</small>{(snapshot.bindings||[]).filter(other=>other.target===link.target&&other.taskId!==task.id).map(other=><button key={`${other.planPath}:${other.taskId}`} onClick={()=>onNavigate(other.planPath,other.taskId)}>{other.taskId} · {other.planPath}</button>)}</div>)}
         {proposals.map((link,i)=><div className="link-candidate" key={`s${i}`}><button className="source-link" onClick={()=>openFile(link.target)}>{link.target}</button><small>Proposed {link.kind} · {link.reason}</small><div className="link-actions"><button onClick={()=>bind(link,'confirm')}>Confirm link</button><button onClick={()=>bind(link,'dismiss')}>Dismiss</button></div></div>)}
         {file&&<div className="source-preview"><strong>{file.path} · read only</strong><small>{file.sha256}</small><pre>{file.body}</pre>{file.truncated&&<p>Preview truncated.</p>}{(file.bindings||[]).map(other=><button key={`${other.planPath}:${other.taskId}`} onClick={()=>onNavigate(other.planPath,other.taskId)}>{other.taskId} · {other.planPath}</button>)}</div>}
         {!proposals.length&&!bindings.length&&<p className="muted-copy">No local match proposed. Add a repository-relative link below.</p>}
-        <label className="observatory-label">Manual file or test link<input value={target} onChange={e=>setTarget(e.target.value)} placeholder="src/example.go"/></label><button disabled={!target.trim()} onClick={()=>bind({target:target.trim(),kind:/(test|spec)/i.test(target)?'test':'file'},'manual')}>Confirm manual link</button>
+        <label className="observatory-label">Manual file or test link<input value={target} onChange={e=>setTarget(e.target.value)} placeholder="src/example.go"/></label><button disabled={!target.trim()} onClick={()=>bind({target:target.trim(),kind:snapshot.files.find(file=>file.path===target.trim())?.kind||'code'},'manual')}>Confirm manual link</button>
       </>}
     </section>
     <section className="inspector-section"><h3>PROJECT CONTEXT</h3><p className="muted-copy">Read only · explicitly scoped shared brain</p>
@@ -72,9 +75,10 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
       <label className="observatory-label">Your question<textarea value={question} onChange={e=>setQuestion(e.target.value)} maxLength={2000}/></label>
       <button disabled={busy||!snapshot||!question.trim()} onClick={()=>deeper()}>Dig deeper{busy?' · requesting…':''}</button>
       <button disabled={busy||!snapshot||!question.trim()} onClick={()=>deeper('plan-code-only')}>Plan/code only · omit brain context</button>
-      {saved.filter(item=>item.taskRef===`${plan.path}#${task.id}`).map(item=><div className="saved-answer" key={item.key}><small>{item.status} · saved receipt · {item.createdAt||'completion time unavailable'}</small><button onClick={async()=>{try{const result=await hostRequest('/api/deep/inspect',{...selection,key:item.key});setAnswer({...result,historical:true});}catch(e){setDeepError(e.message);}}}>Inspect saved answer</button><button onClick={async()=>{try{await hostRequest('/api/deep/delete',{...selection,key:item.key});setSaved(current=>current.filter(other=>other.key!==item.key));setAnswer(null);}catch(e){setDeepError(e.message);}}}>Delete receipt</button></div>)}
+      {saved.filter(item=>item.taskRef===`${plan.path}#${task.id}`).map(item=><div className="saved-answer" key={item.key}><small>{item.status} · saved receipt · {item.createdAt||'completion time unavailable'}</small><button onClick={async()=>{const lease=generation.current;try{const result=await hostRequest('/api/deep/inspect',{...selection,key:item.key});if(mounted.current&&generation.current===lease)setAnswer({...result,historical:true});}catch(e){if(mounted.current&&generation.current===lease)setDeepError(e.message);}}}>Inspect saved answer</button><button onClick={async()=>{const lease=generation.current;try{await hostRequest('/api/deep/delete',{...selection,key:item.key});if(mounted.current&&generation.current===lease){setSaved(current=>current.filter(other=>other.key!==item.key));setAnswer(null);}}catch(e){if(mounted.current&&generation.current===lease)setDeepError(e.message);}}}>Delete receipt</button></div>)}
+      {busy&&<button onClick={()=>deepController.current?.controller.abort()}>Cancel request · outcome may be uncertain</button>}
       {deepError&&<p role="status" className="observatory-error">{deepError}</p>}
-      {answer&&<div className="deep-answer"><small>{answer.historical?'Historical source snapshot':answer.status||'Completed'} · {answer.cached?'Reused identical inputs':'New answer'} · {answer.persistence?'Saved privately':'Session only'}</small><p>{answer.answer||answer.body||answer.message}</p>{answer.key&&<button onClick={async()=>{try{await hostRequest('/api/deep/delete',{key:answer.key,...selection});setAnswer(null);}catch(e){setDeepError(e.message);}}}>Delete saved answer</button>}<button disabled={busy} onClick={()=>deeper('with-context',true)}>Regenerate · may incur a new charge</button></div>}
+      {answer&&<div className="deep-answer"><small>{answer.historical?'Historical source snapshot':answer.status||'Completed'} · {answer.cached?'Reused identical inputs':'New answer'} · {answer.persistence?'Saved privately':'Session only'}</small><p>{answer.answer||answer.body||answer.message}</p>{answer.key&&<button onClick={async()=>{const lease=generation.current;try{await hostRequest('/api/deep/delete',{key:answer.key,...selection});if(mounted.current&&generation.current===lease)setAnswer(null);}catch(e){if(mounted.current&&generation.current===lease)setDeepError(e.message);}}}>Delete saved answer</button>}<button disabled={busy} onClick={()=>deeper(answer.memoryDerived?'with-context':'plan-code-only',true)}>Regenerate · may incur a new charge</button></div>}
     </section>
   </>;
 }

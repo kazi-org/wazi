@@ -10,3 +10,8 @@ ajent.social
 .env.local
 .env.*.local
 artifacts/
+
+.wazi-private/
+.wazi/*.lock
+.wazi/*.tmp
+.cache/

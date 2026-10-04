@@ -8,7 +8,9 @@ export async function hostRequest(path, body, signal) {
     headers['Content-Type'] = 'application/json';
   }
   const response = await fetch(path, {method:body === undefined?'GET':'POST', headers, body:body === undefined?undefined:JSON.stringify(body), signal, cache:'no-store'});
-  const data = await response.json();
+  const raw = await response.text();
+  let data;
+  try { data=JSON.parse(raw); } catch { throw new Error(response.ok?'The local host returned an invalid response.':raw.trim().slice(0,500)||`Local host returned ${response.status}.`); }
   if (!response.ok) throw new Error(data.error || data.message || `Local host returned ${response.status}.`);
   return data;
 }
