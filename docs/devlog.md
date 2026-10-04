@@ -1,5 +1,16 @@
 # Devlog
 
+## 2026-10-04: E3 Go candidate, independent audit and blocked delivery
+
+**Type:** finding
+**Tags:** observatory, Go, traceability, private-results, scope, delivery
+
+**Problem:** E3 requires selected-project code/test traceability, a Go host, rich scoped shared-brain context and lifecycle-qualified durable model answers. Existing main was clean at `f1cd3e7`; the richer owner API was not implemented.
+**Root cause:** Read-only owner source audit at Serenity `e2b5dd17` found fact-only provider-free reads and brain-wide DIRECTION sections; neither qualifies the five-section project seam or all-type lineage. Chrome blocked the candidate loopback page with `ERR_BLOCKED_BY_CLIENT`, and the in-app browser was unavailable.
+**Fix:** Expanded T3.0, used three isolated GPT-6-Luna implementation lanes, and integrated the Go host, source parser digest seam, bounded suggestions/previews, versioned sidecars, fail-closed context contract, metadata-only private request receipts and explicit fixed-model adapter. Preliminary exact-head review at `ca71d56` reported R01–R09; source fixes and regressions are tracked separately. Failed integration CI runs exposed task ID and scope-policy mismatches; they were fixed before accepted checks.
+**Verification:** Candidate `bd965e6` CI `37192461087` passes both jobs including Go race/vet, the frozen 60-fixture suite and frontend tests/build. CI-built Mac host at `c43ba3c` (backend unchanged in `bd965e6`) passed neutral SSD API smoke for root separation, selected-only snapshots, metadata, confirm/manual/CAS, source/reverse links, confinement, unavailable context and provider-disabled behavior. No analysis receipts were created by disabled model attempts. Browser behavior, real owner connectivity and live provider execution remain unverified. Local multi-package commands were held while load or the shared lease excluded this lane; no foreign lease was released.
+**Impact:** Draft PR #3 is reviewable source progress, not complete E3. Full review, GitHub rebase merge and landed verification remain blocked. Frozen portable contract and existing source parser semantics are unchanged; source plans/code were read-only except owned neutral fixture sidecars. No other repository edits, paid provider call, release or deployment occurred.
+
 ## 2026-10-03 — Plan observatory prototype
 
 Chose a dark spatial observatory from the supplied diagram's columns and dependency topology. User subsequently confirmed continuing with the chosen direction. Plan parsing and discovery were implemented in an isolated external-SSD worker lane; frontend and integration in a separate coordinator worktree. The original reference is preserved and the local Three.js checkout is untouched.
