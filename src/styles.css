@@ -66,3 +66,7 @@
 .context-section summary {cursor:pointer;color:#355a47}
 .observatory-error {color:#9c492e;font-size:12px;overflow-wrap:anywhere}
 .deep-answer p {white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.7}
+.source-preview {border:1px solid #dbe4df;border-radius:8px;padding:10px;margin:12px 0;overflow:hidden}
+.source-preview strong,.source-preview small {display:block;overflow-wrap:anywhere;font-size:11px}
+.source-preview pre {max-height:300px;overflow:auto;font-size:10px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.source-link {text-align:left;overflow-wrap:anywhere}
