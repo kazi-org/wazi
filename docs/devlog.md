@@ -129,3 +129,9 @@ f26d7731a0b4f9662dedb7d007ee375236c7dc8f7f3cff9393cf9d0aab59695e
 rejects the actual wrong-subject review probe (exit2/independence_missing), where
 the prior binary returned valid. All60 frozen fixtures and legitimate current
 attested review still pass; wrong digest fails closed. Final re-review/merge wait.
+
+Independent full review (review_observatory; baseadc4e8d/headb45c705) returned
+BLOCKED P1/G2 review proof binding and P2/G3 browser duplicate JSON keys. Go rejects
+duplicate keys, but JSON.parse silently selected the last authored title; display
+import must reject duplicates before conversion. G3 fix/verify assigned to the
+UI lane and joined to exact corrected re-review. No other scoped blocker found.
