@@ -34,6 +34,9 @@ func TestSafeReadRejectsTraversalAndExternalSymlink(t *testing.T) {
 	if err != nil || !strings.Contains(string(got), "package ok") {
 		t.Fatalf("safe read failed: %q, %v", got, err)
 	}
+	if _, err := safeRead(root, "ok.go", 4); err == nil {
+		t.Fatal("read exceeded its byte limit")
+	}
 }
 
 func TestIdentityLocatorUsesPrivateRegistryKeyAndGitCommonDir(t *testing.T) {
@@ -270,10 +273,13 @@ func TestSnapshotRejectsPlanEditedAfterParserRead(t *testing.T) {
 
 func TestSelectedScanExcludesCredentialLikePaths(t *testing.T) {
 	root := t.TempDir()
-	for name, body := range map[string]string{"main.go": "package p", ".env": "TOKEN=secret", "id_rsa": "private", "private-key.pem": "private", "spec.test.ts": "test"} {
+	for name, body := range map[string]string{"main.go": "package p", "module.mjs": "export {}", "widget.spec.cjs": "module.exports = {}", "cache.testenv": "sensitive", "test.env": "TOKEN=secret", "backup.test.txt": "backup", "picture.test.png": "binary", ".hidden.test.go": "hidden", ".env": "TOKEN=secret", "id_rsa": "private", "private-key.pem": "private", "spec.test.ts": "test"} {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0600); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "huge.test.mjs"), make([]byte, (128<<10)+1), 0600); err != nil {
+		t.Fatal(err)
 	}
 	s := New(root, t.TempDir(), "node", "bridge")
 	files, _ := s.scanFiles(root)
@@ -281,13 +287,42 @@ func TestSelectedScanExcludesCredentialLikePaths(t *testing.T) {
 	for _, f := range files {
 		got[f.Path] = true
 	}
-	if !got["main.go"] || !got["spec.test.ts"] {
+	if !got["main.go"] || !got["spec.test.ts"] || !got["module.mjs"] || !got["widget.spec.cjs"] {
 		t.Fatalf("expected code/test files in snapshot: %#v", got)
 	}
-	for _, name := range []string{".env", "id_rsa", "private-key.pem"} {
+	for _, name := range []string{".env", "test.env", "id_rsa", "private-key.pem", "cache.testenv", "backup.test.txt", "picture.test.png", ".hidden.test.go", "huge.test.mjs"} {
 		if got[name] {
 			t.Errorf("sensitive file included: %s", name)
 		}
+	}
+}
+
+func TestSidecarReadRejectsSymlinkParentsAndOversizedFiles(t *testing.T) {
+	root, outside := t.TempDir(), t.TempDir()
+	if err := os.Mkdir(filepath.Join(outside, ".wazi"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outside, ".wazi", "links.json"), []byte(`{"version":1}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, ".wazi"), filepath.Join(root, ".wazi")); err != nil {
+		t.Fatal(err)
+	}
+	s := New(root, t.TempDir(), "node", "bridge")
+	if _, _, err := s.loadSidecar(root, "repo-0123456789abcdef01234567"); err == nil {
+		t.Fatal("followed symlinked sidecar directory")
+	}
+	if err := os.Remove(filepath.Join(root, ".wazi")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, ".wazi"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".wazi", "links.json"), make([]byte, (1<<20)+1), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.loadSidecar(root, "repo-0123456789abcdef01234567"); err == nil {
+		t.Fatal("read oversized sidecar")
 	}
 }
 

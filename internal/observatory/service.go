@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -492,7 +493,23 @@ func safeRead(root, rel string, limit int64) ([]byte, error) {
 	if e != nil || !fi.Mode().IsRegular() || fi.Size() > limit {
 		return nil, errors.New("file unavailable or exceeds bound")
 	}
-	return os.ReadFile(resolved)
+	f, e := os.Open(resolved)
+	if e != nil {
+		return nil, e
+	}
+	defer f.Close()
+	opened, e := f.Stat()
+	if e != nil || !opened.Mode().IsRegular() || opened.Size() > limit {
+		return nil, errors.New("file unavailable or exceeds bound")
+	}
+	b, e := io.ReadAll(io.LimitReader(f, limit+1))
+	if e != nil {
+		return nil, e
+	}
+	if int64(len(b)) > limit {
+		return nil, errors.New("file grew beyond read bound")
+	}
+	return b, nil
 }
 func (s *Service) scanFiles(root string) ([]File, []string) {
 	files := []File{}
@@ -518,11 +535,18 @@ func (s *Service) scanFiles(root string) ([]File, []string) {
 			capped = true
 			return filepath.SkipAll
 		}
+		name := strings.ToLower(filepath.Base(path))
+		if strings.HasPrefix(name, ".") {
+			return nil
+		}
 		ext := strings.ToLower(filepath.Ext(path))
+		if !supportedSourceExtension(ext) {
+			return nil
+		}
 		kind := ""
-		if strings.Contains(strings.ToLower(filepath.Base(path)), "test") || strings.HasSuffix(path, "_test.go") || strings.HasSuffix(path, ".spec.ts") || strings.HasSuffix(path, ".test.ts") {
+		if strings.Contains(name, "test") || strings.Contains(name, "spec") {
 			kind = "test"
-		} else if ext == ".go" || ext == ".ts" || ext == ".tsx" || ext == ".js" || ext == ".jsx" || ext == ".py" || ext == ".rs" || ext == ".swift" || ext == ".java" || ext == ".c" || ext == ".h" {
+		} else {
 			kind = "code"
 		}
 		if kind == "" {
@@ -536,12 +560,16 @@ func (s *Service) scanFiles(root string) ([]File, []string) {
 			capped = true
 			return filepath.SkipAll
 		}
-		b, e := os.ReadFile(path)
+		b, e := safeRead(root, filepath.ToSlash(rel), 128<<10)
 		if e != nil || bytes.IndexByte(b, 0) >= 0 {
 			return nil
 		}
-		files = append(files, File{Path: filepath.ToSlash(rel), Kind: kind, Size: info.Size(), SHA256: digest(b)})
-		totalBytes += info.Size()
+		if totalBytes+int64(len(b)) > s.MaxBytes {
+			capped = true
+			return filepath.SkipAll
+		}
+		files = append(files, File{Path: filepath.ToSlash(rel), Kind: kind, Size: int64(len(b)), SHA256: digest(b)})
+		totalBytes += int64(len(b))
 		return nil
 	})
 	if err != nil || capped {
@@ -549,6 +577,14 @@ func (s *Service) scanFiles(root string) ([]File, []string) {
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	return files, warnings
+}
+func supportedSourceExtension(ext string) bool {
+	switch ext {
+	case ".go", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".rs", ".swift", ".java", ".c", ".h":
+		return true
+	default:
+		return false
+	}
 }
 func sensitivePath(rel string) bool {
 	name := strings.ToLower(filepath.Base(rel))
@@ -594,11 +630,19 @@ func (s *Service) suggest(p Project, files []File, pd string) []Suggestion {
 	return out
 }
 func (s *Service) loadSidecar(root, id string) (Sidecar, string, error) {
-	path := filepath.Join(root, ".wazi", "links.json")
+	dir := filepath.Join(root, ".wazi")
+	if fi, e := os.Lstat(dir); errors.Is(e, os.ErrNotExist) {
+		return Sidecar{Version: 1, RepositoryID: id, Bindings: []Binding{}, Dismissed: []Binding{}}, digest(nil), nil
+	} else if e != nil || fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+		return Sidecar{}, "", errors.New("binding sidecar parent must be a real project-local directory")
+	}
+	path := filepath.Join(dir, "links.json")
 	if fi, e := os.Lstat(path); e == nil && (fi.Mode()&os.ModeSymlink != 0 || !fi.Mode().IsRegular()) {
 		return Sidecar{}, "", errors.New("binding sidecar must be a regular local file")
+	} else if e != nil && !errors.Is(e, os.ErrNotExist) {
+		return Sidecar{}, "", e
 	}
-	b, e := os.ReadFile(path)
+	b, e := safeRead(root, filepath.ToSlash(filepath.Join(".wazi", "links.json")), 1<<20)
 	if errors.Is(e, os.ErrNotExist) {
 		return Sidecar{Version: 1, RepositoryID: id, Bindings: []Binding{}, Dismissed: []Binding{}}, digest(nil), nil
 	}
