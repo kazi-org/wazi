@@ -99,3 +99,16 @@ Initial public main is audited clean root snapshotadc4e8d; normative0.0.1 source
 is also publicly pinned atf04497a with unchanged manifestdigest7582512f. No local
 development history or agent channel is published. This necessary initial-base
 step is distinct from the upcoming reviewed implementation rebase merge.
+
+Integrated verification: CI run37183983768 caught G1 unused Go local while the
+observatory checks passed. Fix7ecf984 removed that local without changing frozen
+specification bytes. CI run37184251198 passed at publice7ed7b8: Go API/CLI tests,
+60 fixture outcomes, Node15 tests and production build. Its Darwin arm64 verifier
+SHA256caa915df2bc1f08f495ec7b452bf7bbe9e67edd2e1c2f350c71ac043c5688100
+ran offline with unreachable proxies: version/fixtures/valid pass, invalid review
+and wrong digest fail with exit2, authorityAuthenticated remains false. D1/D2
+fixes04d8c08/1b4e47e verified in Chrome: desktop panels resize with final lane
+visible, Reset/Map return coherent fit,390px no overflow, acceptance pre-wrap,
+opaque records preserved, no console errors. Public PR1 is draft pending exact
+integrated independent review; no branch protections/rulesets exist, but both
+scoped checks are required by this delivery. Heavy Mac builds stayed held.
