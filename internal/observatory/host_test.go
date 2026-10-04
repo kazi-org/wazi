@@ -1,9 +1,11 @@
 package observatory
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -30,6 +32,197 @@ func TestSafeReadRejectsTraversalAndExternalSymlink(t *testing.T) {
 	got, err := safeRead(root, "ok.go", 1024)
 	if err != nil || !strings.Contains(string(got), "package ok") {
 		t.Fatalf("safe read failed: %q, %v", got, err)
+	}
+}
+
+func TestIdentityLocatorUsesPrivateRegistryKeyAndGitCommonDir(t *testing.T) {
+	base := t.TempDir()
+	first := filepath.Join(base, "first")
+	clone := filepath.Join(base, "clone")
+	for _, root := range []string{first, clone} {
+		if err := os.MkdirAll(filepath.Join(root, ".git"), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	loc1, err := identityLocator(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loc2, err := identityLocator(clone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loc1 == loc2 {
+		t.Fatal("independent clone roots shared a private registry locator")
+	}
+	worktrees := filepath.Join(base, "worktrees")
+	common := filepath.Join(base, "common.git")
+	gitdir := filepath.Join(worktrees, "one.git")
+	for _, dir := range []string{worktrees, common, gitdir} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(gitdir, "commondir"), []byte("../../first/.git\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	worktree := filepath.Join(base, "worktree")
+	if err := os.Mkdir(worktree, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(worktree, ".git"), []byte("gitdir: ../worktrees/one.git\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	wid, err := identityLocator(worktree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wid != loc1 {
+		t.Fatalf("worktree locator = %q, want common-dir locator %q", wid, loc1)
+	}
+}
+
+func TestLockFileReleasesOnCloseWithoutDeletingLockPath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "lock")
+	release, err := lockFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lockFile(path); err == nil {
+		t.Fatal("concurrent lock was granted")
+	}
+	release()
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("lock file was removed: %v", err)
+	}
+	releaseAgain, err := lockFile(path)
+	if err != nil {
+		t.Fatalf("lock was not released: %v", err)
+	}
+	releaseAgain()
+}
+
+func TestLineDerivedTasksAreNotStableBindingSubjects(t *testing.T) {
+	if stableTaskID(Task{SourceID: "line-9"}) {
+		t.Fatal("accepted a line-derived task ID")
+	}
+	if !stableTaskID(Task{SourceID: "T1.1"}) {
+		t.Fatal("rejected an authored plan-local task ID")
+	}
+}
+
+func TestBoundedBufferCapsRetainedProcessOutput(t *testing.T) {
+	b := boundedBuffer{limit: 4}
+	if n, err := b.Write([]byte("abcdef")); err != nil || n != 6 {
+		t.Fatalf("Write = %d, %v", n, err)
+	}
+	if b.String() != "abcd" || !b.exceeded {
+		t.Fatalf("bounded output = %q, exceeded=%v", b.String(), b.exceeded)
+	}
+}
+
+func TestTaskIdentityAndBindingsRefreshAfterPlanEdit(t *testing.T) {
+	root := t.TempDir()
+	repo := filepath.Join(root, "project")
+	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(repo, "src"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	planPath := filepath.Join(repo, "docs", "plan.md")
+	plan := "# Project plan\n\n- [ ] T1.1 Retain record\n"
+	if err := os.WriteFile(planPath, []byte(plan), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "src", "retain.go"), []byte("package retain\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	bridge, err := filepath.Abs(filepath.Join("..", "..", "scripts", "host-bridge.mjs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node is unavailable")
+	}
+	dataDir := filepath.Join(t.TempDir(), "app-data")
+	svc := New(root, dataDir, "node", bridge)
+	scan, err := svc.Discover(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scan.Projects) != 1 {
+		t.Fatalf("discovered %d projects", len(scan.Projects))
+	}
+	if _, err := os.Lstat(filepath.Join(repo, ".git", "wazi-repository-id")); !os.IsNotExist(err) {
+		t.Fatal("discovery wrote repository identity into the source checkout")
+	}
+	projectID := scan.Projects[0].ID
+	if len(scan.Projects[0].Plans) == 0 || len(scan.Projects[0].Plans[0].Tasks) != 1 {
+		t.Fatal("initial task was not parsed")
+	}
+	task := scan.Projects[0].Plans[0].Tasks[0]
+	if task.ID != "T1.1" {
+		t.Fatalf("internal task ID = %q, want source ID T1.1", task.ID)
+	}
+	snapshot, err := svc.Snapshot(context.Background(), projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var candidate *Suggestion
+	for i := range snapshot.Suggestions {
+		if snapshot.Suggestions[i].TaskID == task.ID {
+			candidate = &snapshot.Suggestions[i]
+			break
+		}
+	}
+	if candidate == nil {
+		t.Fatal("expected local filename suggestion")
+	}
+	if _, err := svc.WriteBinding(projectID, candidate.PlanPath, task.ID, candidate.Target, candidate.Kind, candidate.BasisDigest, snapshot.SidecarDigest, "confirm"); err != nil {
+		t.Fatalf("confirm initial task: %v", err)
+	}
+	duplicate := "# Project plan\n\n- [ ] T1.1 Retain record\n- [ ] T1.1 Retain record\n"
+	if err := os.WriteFile(planPath, []byte(duplicate), 0600); err != nil {
+		t.Fatal(err)
+	}
+	duplicated, err := svc.Snapshot(context.Background(), projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.WriteBinding(projectID, candidate.PlanPath, task.ID, candidate.Target, candidate.Kind, candidate.BasisDigest, duplicated.SidecarDigest, "confirm"); err == nil {
+		t.Fatal("confirmed an ambiguous duplicate task ID")
+	}
+	if err := os.WriteFile(planPath, []byte("# Project plan\n\n- [ ] T1.2 Renamed record\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := svc.Snapshot(context.Background(), projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Suggestions) != 0 {
+		t.Fatalf("removed task still has suggestions: %#v", updated.Suggestions)
+	}
+	if _, err := svc.ResolveTask(updated, candidate.PlanPath, task.ID); err == nil {
+		t.Fatal("resolved a task removed from the source plan")
+	}
+	if _, err := svc.WriteBinding(projectID, candidate.PlanPath, task.ID, candidate.Target, candidate.Kind, candidate.BasisDigest, updated.SidecarDigest, "confirm"); err == nil {
+		t.Fatal("confirmed a task removed from the source plan")
+	}
+	if len(updated.Bindings) != 1 || updated.Bindings[0].Freshness != "stale" {
+		t.Fatalf("old authored binding was not retained as stale: %#v", updated.Bindings)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, "repositories.json"), []byte("[]"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Discover(context.Background()); err == nil {
+		t.Fatal("corrupt private identity registry was silently replaced")
+	}
+	if b, err := os.ReadFile(filepath.Join(dataDir, "repositories.json")); err != nil || string(b) != "[]" {
+		t.Fatalf("corrupt registry changed: %q %v", b, err)
 	}
 }
 

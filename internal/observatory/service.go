@@ -77,6 +77,10 @@ type Binding struct {
 
 const AnalyzerVersion = "local-path-suggestions-v1"
 
+func stableTaskID(task Task) bool {
+	return task.CanonicalID != "" || (task.SourceID != "" && !strings.HasPrefix(task.SourceID, "line-"))
+}
+
 type Sidecar struct {
 	Version      int       `json:"version"`
 	RepositoryID string    `json:"repositoryId"`
@@ -142,13 +146,51 @@ func New(root, dataDir, node, bridge string) *Service {
 	return &Service{Root: root, DataDir: dataDir, Node: node, Bridge: bridge, MaxFiles: 2500, MaxBytes: 32 << 20, projects: map[string]string{}, repositories: map[string]string{}}
 }
 func digest(b []byte) string { h := sha256.Sum256(b); return "sha256:" + hex.EncodeToString(h[:]) }
+func validRepositoryID(id string) bool {
+	if len(id) != len("repo-")+24 || !strings.HasPrefix(id, "repo-") {
+		return false
+	}
+	for _, c := range id[len("repo-"):] {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+type boundedBuffer struct {
+	bytes.Buffer
+	limit    int
+	exceeded bool
+}
+
+func (b *boundedBuffer) Write(p []byte) (int, error) {
+	n := len(p)
+	remaining := b.limit - b.Len()
+	if remaining > 0 {
+		if remaining > n {
+			remaining = n
+		}
+		_, _ = b.Buffer.Write(p[:remaining])
+	}
+	if remaining < n {
+		b.exceeded = true
+	}
+	return n, nil
+}
 func (s *Service) Discover(ctx context.Context) (Scan, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, s.Node, s.Bridge, s.Root)
-	var out, stderr bytes.Buffer
+	var out, stderr boundedBuffer
+	out.limit, stderr.limit = 16<<20, 4096
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		return Scan{}, fmt.Errorf("plan scanner: %w: %s", err, stderr.String())
+	}
+	if out.exceeded {
+		return Scan{}, errors.New("plan scanner output exceeded the 16 MiB bound")
 	}
 	var result struct {
 		Scan struct {
@@ -167,13 +209,40 @@ func (s *Service) Discover(ctx context.Context) (Scan, error) {
 	}
 	for i := range got.Projects {
 		got.Projects[i].Hosted = false
+		for j := range got.Projects[i].Plans {
+			for k := range got.Projects[i].Plans[j].Tasks {
+				task := &got.Projects[i].Plans[j].Tasks[k]
+				task.ID = task.SourceID
+			}
+		}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	registryPath := filepath.Join(s.DataDir, "repositories.json")
+	if err := os.MkdirAll(s.DataDir, 0700); err != nil {
+		return Scan{}, err
+	}
+	if fi, err := os.Lstat(s.DataDir); err != nil || fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+		return Scan{}, errors.New("private data path must be a real directory")
+	}
+	if err := os.Chmod(s.DataDir, 0700); err != nil {
+		return Scan{}, fmt.Errorf("secure private data directory: %w", err)
+	}
+	unlock, err := lockFile(filepath.Join(s.DataDir, ".repositories.lock"))
+	if err != nil {
+		return Scan{}, err
+	}
+	defer unlock()
 	registry := map[string]string{}
 	if b, e := os.ReadFile(registryPath); e == nil {
-		_ = json.Unmarshal(b, &registry)
+		if e = json.Unmarshal(b, &registry); e != nil || registry == nil {
+			return Scan{}, errors.New("private repository identity registry is corrupt; refusing to replace identities")
+		}
+		for locator, id := range registry {
+			if locator == "" || !validRepositoryID(id) {
+				return Scan{}, errors.New("private repository identity registry has an invalid entry")
+			}
+		}
 	} else if !errors.Is(e, os.ErrNotExist) {
 		return Scan{}, e
 	}
@@ -198,17 +267,18 @@ func (s *Service) Discover(ctx context.Context) (Scan, error) {
 				got.Projects[i].Hosted = true
 			}
 		}
-		rid := gitIdentity(abs)
-		if rid == "" {
-			rid = registry[abs]
+		locator, identityErr := identityLocator(abs)
+		if identityErr != nil {
+			return Scan{}, identityErr
 		}
+		rid := registry[locator]
 		if rid == "" {
 			id, e := RandomCapability()
 			if e != nil {
 				return Scan{}, e
 			}
 			rid = "repo-" + id[:24]
-			registry[abs] = rid
+			registry[locator] = rid
 			changed = true
 		}
 		s.repositories[p.ID] = rid
@@ -266,21 +336,28 @@ func (s *Service) project(id string) (string, *Project, string, error) {
 	}
 	return "", nil, "", errors.New("project unavailable")
 }
-func gitIdentity(root string) string {
+func identityLocator(root string) (string, error) {
 	marker := filepath.Join(root, ".git")
 	st, err := os.Lstat(marker)
 	if err != nil {
-		return ""
+		if errors.Is(err, os.ErrNotExist) {
+			canonical, e := filepath.EvalSymlinks(root)
+			if e != nil {
+				return "", e
+			}
+			return "root:" + canonical, nil
+		}
+		return "", fmt.Errorf("inspect project Git metadata: %w", err)
 	}
 	gitDir := marker
 	if st.Mode().IsRegular() {
 		b, e := os.ReadFile(marker)
 		if e != nil {
-			return ""
+			return "", fmt.Errorf("read project Git metadata: %w", e)
 		}
 		line := strings.TrimSpace(string(b))
 		if !strings.HasPrefix(line, "gitdir: ") {
-			return ""
+			return "", errors.New("project .git pointer is malformed")
 		}
 		gitDir = strings.TrimSpace(strings.TrimPrefix(line, "gitdir: "))
 		if !filepath.IsAbs(gitDir) {
@@ -296,37 +373,14 @@ func gitIdentity(root string) string {
 			v = filepath.Join(gitDir, v)
 		}
 		gitDir = v
+	} else if !errors.Is(e, os.ErrNotExist) {
+		return "", fmt.Errorf("read Git common directory: %w", e)
 	}
-	identityPath := filepath.Join(gitDir, "wazi-repository-id")
-	if b, e := os.ReadFile(identityPath); e == nil {
-		id := strings.TrimSpace(string(b))
-		if strings.HasPrefix(id, "repo-") {
-			return id
-		}
-		return ""
-	}
-	capability, e := RandomCapability()
+	common, e := filepath.EvalSymlinks(gitDir)
 	if e != nil {
-		return ""
+		return "", fmt.Errorf("resolve Git common directory: %w", e)
 	}
-	id := "repo-" + capability[:24]
-	f, e := os.OpenFile(identityPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-	if e != nil {
-		if b, re := os.ReadFile(identityPath); re == nil {
-			return strings.TrimSpace(string(b))
-		}
-		return ""
-	}
-	_, e = f.WriteString(id + "\n")
-	ce := f.Close()
-	if e == nil {
-		e = ce
-	}
-	if e != nil {
-		_ = os.Remove(identityPath)
-		return ""
-	}
-	return id
+	return "git:" + common, nil
 }
 func (s *Service) Snapshot(ctx context.Context, id string) (Snapshot, error) {
 	if _, err := s.Discover(ctx); err != nil {
@@ -487,7 +541,7 @@ func (s *Service) suggest(p Project, files []File, pd string) []Suggestion {
 	out := []Suggestion{}
 	for _, pl := range p.Plans {
 		for _, t := range pl.Tasks {
-			if t.CanonicalID == "" {
+			if !stableTaskID(t) {
 				continue
 			}
 			words := strings.Fields(strings.ToLower(t.Title))
@@ -573,12 +627,21 @@ func (s *Service) WriteBinding(id, planPath, taskID, target, kind, basis, expect
 	if fi, err := os.Lstat(dir); err != nil || fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
 		return Snapshot{}, errors.New(".wazi must be a real project-local directory")
 	}
-	lock, e := os.OpenFile(filepath.Join(dir, ".links.lock"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-	if e != nil {
-		return Snapshot{}, errors.New("another Wazi process is updating bindings, or a prior lock needs recovery")
+	lockDir := filepath.Join(s.DataDir, "locks")
+	if e = os.MkdirAll(lockDir, 0700); e != nil {
+		return Snapshot{}, e
 	}
-	_ = lock.Close()
-	defer os.Remove(filepath.Join(dir, ".links.lock"))
+	if fi, err := os.Lstat(lockDir); err != nil || fi.Mode()&os.ModeSymlink != 0 || !fi.IsDir() {
+		return Snapshot{}, errors.New("private lock path must be a real directory")
+	}
+	if e = os.Chmod(lockDir, 0700); e != nil {
+		return Snapshot{}, e
+	}
+	unlock, e := lockFile(filepath.Join(lockDir, repoID+".bindings.lock"))
+	if e != nil {
+		return Snapshot{}, e
+	}
+	defer unlock()
 	side, actual, e := s.loadSidecar(root, repoID)
 	if e != nil {
 		return Snapshot{}, e
@@ -633,7 +696,7 @@ func (s *Service) WriteBinding(id, planPath, taskID, target, kind, basis, expect
 			for _, t := range pl.Tasks {
 				if t.ID == taskID {
 					count++
-					if t.CanonicalID != "" {
+					if stableTaskID(t) {
 						stable = true
 					}
 				}
@@ -680,6 +743,16 @@ func (s *Service) WriteBinding(id, planPath, taskID, target, kind, basis, expect
 	}
 	if e = os.Chmod(name, 0600); e != nil {
 		return Snapshot{}, e
+	}
+	latest, checkErr := os.ReadFile(filepath.Join(dir, "links.json"))
+	latestDigest := digest(latest)
+	if errors.Is(checkErr, os.ErrNotExist) {
+		latestDigest = digest(nil)
+	} else if checkErr != nil {
+		return Snapshot{}, checkErr
+	}
+	if latestDigest != actual {
+		return Snapshot{}, errors.New("sidecar changed during update; refresh and review again")
 	}
 	if e = os.Rename(name, filepath.Join(dir, "links.json")); e != nil {
 		return Snapshot{}, e

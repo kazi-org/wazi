@@ -2,16 +2,20 @@
 import { scanPlans } from './plans.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 const root = process.argv[2];
 if (!root || process.argv.length !== 3) process.exit(2);
 const scan = await scanPlans({ root });
 const roots = {};
+const wanted = new Set(scan.projects.map(p => p.id));
+const projectId = dir => `project-${createHash('sha256').update(path.resolve(dir)).digest('hex').slice(0, 16)}`;
 const queue = [{ path: path.resolve(root), depth: 0 }];
 let seen = 0;
 while (queue.length && seen < 12000) {
   const current = queue.shift(); seen++;
   let entries; try { entries = await fs.readdir(current.path, { withFileTypes: true }); } catch { continue; }
-  for (const p of scan.projects) if (!roots[p.id] && p.plans.length && await Promise.all(p.plans.map(async plan => { try { return (await fs.stat(path.join(current.path, plan.path))).isFile(); } catch { return false; } })).then(xs => xs.every(Boolean))) roots[p.id] = current.path;
+  const id = projectId(current.path);
+  if (wanted.has(id)) roots[id] = current.path;
   const marker = entries.find(e => e.name === '.git');
   if (marker && marker.isDirectory() || marker && marker.isFile()) continue;
   if (current.depth >= 8) continue;
