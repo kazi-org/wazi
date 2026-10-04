@@ -5,34 +5,97 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/kazi-org/wazi/internal/app"
 	brain "github.com/kazi-org/wazi/internal/context"
 	"github.com/kazi-org/wazi/internal/deep"
+	"github.com/kazi-org/wazi/internal/desktop"
 	"github.com/kazi-org/wazi/internal/observatory"
 )
 
+var desktopDiagnostics bool
+
 func main() {
-	root := flag.String("root", filepath.Join(os.Getenv("HOME"), "Code"), "bounded plan discovery root")
+	root := flag.String("root", "", "bounded plan discovery root")
 	assets := flag.String("assets", "dist/client", "built frontend directory")
-	data := flag.String("data", filepath.Join(os.Getenv("HOME"), ".local", "share", "wazi"), "private app data directory")
+	data := flag.String("data", "", "private app data directory")
+	node := flag.String("node", "node", "Node executable used for the fixed parser bridge")
+	bridge := flag.String("bridge", "", "fixed host bridge script")
 	port := flag.Int("port", 0, "loopback port (0 selects an available port)")
 	snapshotID := flag.String("snapshot", "", "print selected project snapshot and exit")
 	enableAI := flag.Bool("enable-openrouter", false, "enable explicit user-click requests with WAZI_OPENROUTER_KEY; may incur charges")
 	contextMap := flag.String("context-map", "", "private JSON repository-to-brain scope configuration; no reader is qualified by this flag")
+	desktopReady := flag.Bool("desktop-ready", false, "emit the private desktop readiness handshake after bind")
+	desktopNonce := flag.String("desktop-nonce", "", "fresh launcher nonce for desktop readiness")
+	parentWatch := flag.Bool("parent-watch", false, "shutdown when the launcher's stdin pipe closes")
 	flag.Parse()
+	desktopMode := *desktopReady
+	desktopDiagnostics = desktopMode
+	home := os.Getenv("HOME")
+	if *root == "" {
+		*root = filepath.Join(home, "Code")
+	}
+	if *data == "" {
+		if desktopMode {
+			*data = filepath.Join(home, "Library", "Application Support", "Wazi")
+		} else {
+			*data = filepath.Join(home, ".local", "share", "wazi")
+		}
+	}
+	if *bridge == "" {
+		*bridge = filepath.Join(mustwd(), "scripts", "host-bridge.mjs")
+	}
+	if (*desktopNonce != "" || *parentWatch) && !desktopMode {
+		fatal("desktop nonce and parent watch require -desktop-ready")
+	}
+	if desktopMode {
+		if !*parentWatch {
+			fatal("desktop mode requires -parent-watch")
+		}
+		if err := desktop.ValidateNonce(*desktopNonce); err != nil {
+			fatal(err.Error())
+		}
+		if *enableAI {
+			fatal("desktop mode does not accept inherited OpenRouter activation")
+		}
+		if *snapshotID != "" {
+			fatal("desktop mode does not support snapshot output")
+		}
+	}
 	absRoot, e := filepath.Abs(*root)
 	check(e)
 	absData, e := filepath.Abs(*data)
 	check(e)
 	absAssets, e := filepath.Abs(*assets)
 	check(e)
-	svc := observatory.New(absRoot, absData, "node", filepath.Join(mustwd(), "scripts", "host-bridge.mjs"))
+	nodePath := *node
+	if desktopMode {
+		for name, path := range map[string]string{"root": *root, "assets": *assets, "data": *data, "bridge": *bridge} {
+			if !filepath.IsAbs(path) {
+				fatal("desktop " + name + " path must be absolute")
+			}
+		}
+		if !filepath.IsAbs(*node) {
+			fatal("desktop node path must be absolute")
+		}
+		nodePath = filepath.Clean(*node)
+	}
+	absBridge, e := filepath.Abs(*bridge)
+	check(e)
+	if desktopMode {
+		if e = (desktop.Resources{Root: absRoot, Assets: absAssets, Data: absData, Node: nodePath, Bridge: absBridge}).Validate(); e != nil {
+			fatal(e.Error())
+		}
+	}
+	svc := observatory.New(absRoot, absData, nodePath, absBridge)
 	if *snapshotID != "" {
 		_, e = svc.Discover(context.Background())
 		check(e)
@@ -84,9 +147,34 @@ func main() {
 	bind := fmt.Sprintf("127.0.0.1:%d", *port)
 	ln, e := net.Listen("tcp", bind)
 	check(e)
-	fmt.Printf("Wazi local host: http://%s (session capability held in memory)\n", ln.Addr())
-	server := &http.Server{Handler: host.Handler(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 20}
-	check(server.Serve(ln))
+	if desktopMode {
+		check(desktop.WriteReady(os.Stdout, ln.Addr(), *desktopNonce, os.Getpid()))
+	} else {
+		fmt.Printf("Wazi local host: http://%s (session capability held in memory)\n", ln.Addr())
+	}
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	if *parentWatch {
+		go func() { _, _ = io.Copy(io.Discard, os.Stdin); cancel() }()
+	}
+	server := &http.Server{Handler: host.Handler(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 20, BaseContext: func(net.Listener) context.Context { return ctx }}
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- server.Serve(ln) }()
+	select {
+	case <-ctx.Done():
+		shutdownCtx, stop := context.WithTimeout(context.Background(), 3*time.Second)
+		defer stop()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			_ = server.Close()
+		}
+		if err := <-serveErr; err != nil && err != http.ErrServerClosed {
+			fatal(err.Error())
+		}
+	case err := <-serveErr:
+		if err != nil && err != http.ErrServerClosed {
+			fatal(err.Error())
+		}
+	}
 }
 func mustwd() string { x, e := os.Getwd(); check(e); return x }
 func check(e error) {
@@ -94,4 +182,13 @@ func check(e error) {
 		fatal(e.Error())
 	}
 }
-func fatal(s string) { fmt.Fprintln(os.Stderr, s); os.Exit(1) }
+func fatal(s string) {
+	if desktopDiagnostics {
+		s = "desktop host startup failed"
+	}
+	if len(s) > 512 {
+		s = s[:512]
+	}
+	fmt.Fprintln(os.Stderr, s)
+	os.Exit(1)
+}
