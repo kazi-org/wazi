@@ -57,6 +57,9 @@ func main() {
 		fatal("desktop nonce and parent watch require -desktop-ready")
 	}
 	if desktopMode {
+		if *port != 0 {
+			fatal("desktop mode requires an ephemeral port")
+		}
 		if !*parentWatch {
 			fatal("desktop mode requires -parent-watch")
 		}
