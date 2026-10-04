@@ -40,14 +40,15 @@ func New(c Config) (*Service, error) {
 	if c.MaxBytes <= 0 {
 		return nil, errors.New("positive cache capacity is required")
 	}
-	if c.Engine == nil {
-		return nil, errors.New("analysis engine is required")
-	}
 	if err := os.MkdirAll(c.Dir, 0700); err != nil {
 		return nil, fmt.Errorf("create private cache directory: %w", err)
 	}
 	if err := os.Chmod(c.Dir, 0700); err != nil {
 		return nil, fmt.Errorf("secure private cache directory: %w", err)
+	}
+	info, err := os.Lstat(c.Dir)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return nil, errors.New("private cache path must be a real directory")
 	}
 	s := &Service{dir: c.Dir, max: c.MaxBytes, engine: c.Engine, validator: c.Validator, memoryPersistence: c.MemoryPersistenceQualified && c.Validator != nil}
 	if err := s.sweepExpired(context.Background()); err != nil {
@@ -118,7 +119,20 @@ func validate(m Manifest) error {
 		return errors.New("memory scope must bind the repository, brain, audience and project")
 	}
 	for _, c := range m.Context {
-		if c.OwnerRef == "" || c.Kind == "" || c.EntityID == "" || c.ExpiresAt.IsZero() || c.BrainID != m.ContextScope.BrainID || c.AudienceID != m.ContextScope.AudienceID || c.ProjectID != m.ContextScope.ProjectID || c.ContentDigest == "" || c.Version == "" || c.Body == "" || digest(c.Body) != c.ContentDigest {
+		refOK, entityOK := false, false
+		for _, id := range m.ContextScope.ReferenceIDs {
+			if id == c.OwnerRef {
+				refOK = true
+				break
+			}
+		}
+		for _, id := range m.ContextScope.EntityIDs {
+			if c.EntityID != "" && id == c.EntityID {
+				entityOK = true
+				break
+			}
+		}
+		if c.OwnerRef == "" || c.Kind == "" || c.ExpiresAt.IsZero() || (!refOK && !entityOK) || c.BrainID != m.ContextScope.BrainID || c.AudienceID != m.ContextScope.AudienceID || c.ProjectID != m.ContextScope.ProjectID || c.ContentDigest == "" || c.Version == "" || c.Body == "" || digest(c.Body) != c.ContentDigest {
 			return errors.New("context item is missing displayed content or exact scoped lineage")
 		}
 		inputBytes += len(c.Body)
@@ -127,8 +141,8 @@ func validate(m Manifest) error {
 		return errors.New("selected input exceeds the local prompt-size limit")
 	}
 	if m.ContextMode == ContextMemory {
-		if len(m.ContextScope.ReferenceIDs) != len(m.Context) || len(m.ContextScope.EntityIDs) == 0 {
-			return errors.New("memory scope must exactly identify displayed references and entities")
+		if len(m.ContextScope.ReferenceIDs) == 0 && len(m.ContextScope.EntityIDs) == 0 {
+			return errors.New("memory scope must identify at least one mapped entity or reference")
 		}
 		refs, entities := map[string]bool{}, map[string]bool{}
 		for _, ref := range m.ContextScope.ReferenceIDs {
@@ -144,13 +158,10 @@ func validate(m Manifest) error {
 			entities[id] = true
 		}
 		for _, c := range m.Context {
-			if !refs[c.OwnerRef] || !entities[c.EntityID] {
-				return errors.New("displayed memory items do not match qualified references and entities")
+			refOK, entityOK := refs[c.OwnerRef], entities[c.EntityID]
+			if !refOK && !entityOK {
+				return errors.New("displayed memory items do not match qualified scope")
 			}
-			delete(refs, c.OwnerRef)
-		}
-		if len(refs) != 0 {
-			return errors.New("memory scope contains undisplayed references")
 		}
 	}
 	return nil
@@ -171,7 +182,11 @@ func (s *Service) Analyze(ctx context.Context, m Manifest) (Result, error) {
 	if err == nil {
 		switch old.Status {
 		case "completed":
-			return s.visible(ctx, old)
+			result, err := s.visible(ctx, old)
+			if err == nil {
+				result.Cached = true
+			}
+			return result, err
 		case "dispatching", "unknown", "ephemeral_completed":
 			return Result{Key: key, Model: m.Model, Status: "unknown", Freshness: "unknown"}, ErrUnknownOutcome
 		case "deleted":
@@ -180,7 +195,10 @@ func (s *Service) Analyze(ctx context.Context, m Manifest) (Result, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return Result{}, err
 	}
-	if m.ContextMode == ContextMemory && !ephemeral {
+	if s.engine == nil {
+		return Result{}, ErrProviderUnavailable
+	}
+	if m.ContextMode == ContextMemory && s.validator != nil {
 		if _, err := s.checkLineage(ctx, m); err != nil {
 			return Result{}, fmt.Errorf("validate memory lineage before dispatch: %w", err)
 		}
@@ -190,7 +208,7 @@ func (s *Service) Analyze(ctx context.Context, m Manifest) (Result, error) {
 		return Result{}, err
 	}
 	defer releaseCapacity()
-	stored := m
+	stored := cloneManifest(m)
 	if ephemeral {
 		stored.PlanBody = ""
 		stored.Code = nil
@@ -202,7 +220,7 @@ func (s *Service) Analyze(ctx context.Context, m Manifest) (Result, error) {
 	if err := s.write(r); err != nil {
 		return Result{}, err
 	}
-	answer, callErr := s.engine.Complete(ctx, m)
+	answer, callErr := s.engine.Complete(ctx, cloneManifest(m))
 	if callErr != nil {
 		r.Status = "unknown"
 		r.Answer = ""
@@ -231,12 +249,21 @@ func (s *Service) Analyze(ctx context.Context, m Manifest) (Result, error) {
 	return s.visible(ctx, r)
 }
 
+func cloneManifest(m Manifest) Manifest {
+	m.Settings = append(json.RawMessage(nil), m.Settings...)
+	m.Code = append([]CodeInput(nil), m.Code...)
+	m.Context = append([]ContextItem(nil), m.Context...)
+	m.ContextScope.EntityIDs = append([]string(nil), m.ContextScope.EntityIDs...)
+	m.ContextScope.ReferenceIDs = append([]string(nil), m.ContextScope.ReferenceIDs...)
+	return m
+}
+
 func (s *Service) visible(ctx context.Context, r receipt) (Result, error) {
 	if r.Status != "completed" {
 		return Result{Key: r.Key, Model: r.Manifest.Model, Status: r.Status, Freshness: r.Status}, nil
 	}
 	if r.Manifest.ContextMode == ContextMemory {
-		if s.validator == nil {
+		if s.validator == nil || !s.memoryPersistence {
 			return Result{Key: r.Key, Model: r.Manifest.Model, Status: "hidden", Freshness: "owner_unavailable"}, ErrMemoryUnavailable
 		}
 		if _, err := s.checkLineage(ctx, r.Manifest); err != nil {
@@ -327,7 +354,7 @@ func (s *Service) InspectForRepository(ctx context.Context, key, repositoryID st
 	if r.Manifest.RepositoryID != repositoryID {
 		return Result{}, ErrNotFound
 	}
-	return s.visible(ctx, r)
+	return Result{Key: key, TaskRef: r.Manifest.TaskRef, Model: r.Manifest.Model, CreatedAt: r.CreatedAt, Status: r.Status, Freshness: "requires_current_manifest", Persistence: r.Status == "completed", Cached: true}, nil
 }
 
 func (s *Service) InspectForManifest(ctx context.Context, m Manifest) (Result, error) {
@@ -335,7 +362,19 @@ func (s *Service) InspectForManifest(ctx context.Context, m Manifest) (Result, e
 	if e != nil {
 		return Result{}, e
 	}
-	return s.InspectForRepository(ctx, key, m.RepositoryID)
+	result, e := s.InspectForRepository(ctx, key, m.RepositoryID)
+	if e != nil {
+		return result, e
+	}
+	r, e := s.read(key)
+	if e != nil {
+		return Result{}, e
+	}
+	result, e = s.visible(ctx, r)
+	if e == nil {
+		result.Cached = true
+	}
+	return result, e
 }
 
 // DeleteForRepository retains a body-free receipt tombstone to prevent accidental resend.
@@ -392,6 +431,9 @@ func (s *Service) List(ctx context.Context, repositoryID string) ([]Result, erro
 func (s *Service) Regenerate(ctx context.Context, m Manifest, costDisclosure CostDisclosure) (Result, error) {
 	if strings.TrimSpace(costDisclosure.Summary) == "" || !costDisclosure.Acknowledged {
 		return Result{}, errors.New("explicit cost disclosure acknowledgement is required")
+	}
+	if s.engine == nil {
+		return Result{}, ErrProviderUnavailable
 	}
 	key, e := Key(m)
 	if e != nil {
