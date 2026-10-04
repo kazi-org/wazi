@@ -1,0 +1,105 @@
+.desktop-chrome {
+  position: fixed;
+  z-index: 1000;
+  inset: 0 0 auto;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+
+.desktop-window-controls {
+  pointer-events: auto;
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  padding: 0 12px;
+  height: 34px;
+}
+
+.desktop-control {
+  box-sizing: border-box;
+  position: relative;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.desktop-control::before {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  left: 6px;
+  top: 6px;
+  box-sizing: border-box;
+  border: 1px solid rgb(0 0 0 / 22%);
+  border-radius: 50%;
+}
+.desktop-close::before { background: #ff5f57; }
+.desktop-minimize::before { background: #febc2e; }
+.desktop-fullscreen::before { background: #28c840; }
+.desktop-control span { display: none; position: absolute; }
+.desktop-window-controls:hover .desktop-control span,
+.desktop-control:focus-visible span { display: block; }
+.desktop-close span::before,
+.desktop-close span::after {
+  content: "";
+  position: absolute;
+  width: 6px;
+  height: 1px;
+  left: 9px;
+  top: 11px;
+  background: #54201d;
+  transform: rotate(45deg);
+}
+.desktop-close span::after { transform: rotate(-45deg); }
+.desktop-minimize span {
+  left: 9px;
+  top: 11px;
+  width: 6px;
+  height: 1px;
+  background: #5d4300;
+}
+.desktop-fullscreen span {
+  left: 9px;
+  top: 9px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid #125b1c;
+  border-radius: 1px;
+}
+.desktop-control:focus-visible {
+  outline: 2px solid #1674d1;
+  outline-offset: 3px;
+}
+
+.desktop-drag-region {
+  pointer-events: auto;
+  width: 112px;
+  height: 26px;
+  margin-left: 2px;
+  border-radius: 5px;
+  cursor: grab;
+  -webkit-app-region: no-drag;
+}
+.desktop-drag-region:active { cursor: grabbing; }
+.desktop-chrome-status {
+  position: absolute;
+  left: 50%;
+  top: 36px;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: #fff;
+  background: #272729;
+  font: 12px/1.35 system-ui, sans-serif;
+  pointer-events: none;
+}
+.desktop-chrome-status:empty { display: none; }
