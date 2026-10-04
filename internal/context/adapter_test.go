@@ -93,6 +93,87 @@ func TestLineageNegativeAndUnavailableStayDistinct(t *testing.T) {
 	}
 }
 
+func TestReferenceOnlyMappingAllowsUnmappedEntityAndRejectsUnknownReference(t *testing.T) {
+	now := time.Now()
+	r := &fixtureReader{qualification: completeQualification()}
+	r.read = func(_ context.Context, scope Scope, _ Limits) (Bundle, error) {
+		sections := map[SectionName]Section{}
+		for _, name := range SectionNames() {
+			sections[name] = Section{Status: Empty}
+		}
+		record := Record{ReferenceID: "ref-allowed", Kind: Fact, BrainID: scope.BrainID, AudienceID: scope.AudienceID, ProjectID: scope.ProjectID, EntityID: "entity-outside-mapping", Content: "fact body", ContentDigest: DigestContent("fact body"), Version: "v1", FetchedAt: now, ExpiresAt: now.Add(time.Minute)}
+		sections[Facts] = Section{Status: Available, Records: []Record{record}}
+		return Bundle{Scope: scope, FetchedAt: now, ValidTo: now.Add(time.Minute), Sections: sections}, nil
+	}
+	config := HostConfig{ByRepositoryID: map[string]Mapping{"repo-stable-1": {BrainID: "brain-1", AudienceID: "aud-1", ProjectID: "proj-1", ReferenceIDs: []string{"ref-allowed"}}}}
+	s, err := NewService(config, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Read(context.Background(), "repo-stable-1"); err != nil {
+		t.Fatalf("mapped reference with unrelated entity was rejected: %v", err)
+	}
+
+	r.read = func(_ context.Context, scope Scope, _ Limits) (Bundle, error) {
+		sections := map[SectionName]Section{}
+		for _, name := range SectionNames() {
+			sections[name] = Section{Status: Empty}
+		}
+		record := Record{ReferenceID: "ref-unknown", Kind: Fact, BrainID: scope.BrainID, AudienceID: scope.AudienceID, ProjectID: scope.ProjectID, EntityID: "entity-outside-mapping", Content: "fact body", ContentDigest: DigestContent("fact body"), Version: "v1", FetchedAt: now, ExpiresAt: now.Add(time.Minute)}
+		sections[Facts] = Section{Status: Available, Records: []Record{record}}
+		return Bundle{Scope: scope, FetchedAt: now, ValidTo: now.Add(time.Minute), Sections: sections}, nil
+	}
+	if _, err := s.Read(context.Background(), "repo-stable-1"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("unmapped reference error = %v, want ErrInvalid", err)
+	}
+}
+
+func TestLineageRejectsDuplicateRequestsVersionChangesAndOversize(t *testing.T) {
+	config := fixtureConfig()
+	scope := Scope{RepositoryID: "repo-stable-1", BrainID: "brain-1", AudienceID: "aud-1", ProjectID: "proj-1", EntityIDs: []string{"entity-1"}}
+	now := time.Now()
+	ref := LineageRef{ReferenceID: "fact-1", Kind: Fact, BrainID: scope.BrainID, AudienceID: scope.AudienceID, ProjectID: scope.ProjectID, EntityID: "entity-1", ContentDigest: DigestContent("body"), Version: "v1", ExpiresAt: now.Add(time.Hour)}
+	calls := 0
+	r := &fixtureReader{qualification: completeQualification()}
+	r.validate = func(_ context.Context, _ Scope, refs []LineageRef) (LineageValidation, error) {
+		calls++
+		return LineageValidation{ValidatedAt: time.Now(), Results: []LineageResult{{ReferenceID: refs[0].ReferenceID, State: LineageEligible, BrainID: ref.BrainID, AudienceID: ref.AudienceID, ProjectID: ref.ProjectID, EntityID: ref.EntityID, ContentDigest: ref.ContentDigest, Version: "v2", ExpiresAt: time.Now().Add(5 * time.Minute)}}}, nil
+	}
+	s, err := NewService(config, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ValidateLineage(context.Background(), scope, []LineageRef{ref, ref}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("duplicate request error = %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("duplicate request reached reader %d times", calls)
+	}
+	if _, err := s.ValidateLineage(context.Background(), scope, []LineageRef{ref}); !errors.Is(err, ErrIneligible) {
+		t.Fatalf("changed version error = %v, want ErrIneligible", err)
+	}
+
+	r.validate = func(_ context.Context, _ Scope, refs []LineageRef) (LineageValidation, error) {
+		return LineageValidation{ValidatedAt: time.Now(), Results: []LineageResult{{ReferenceID: refs[0].ReferenceID, State: LineageEligible, BrainID: ref.BrainID, AudienceID: ref.AudienceID, ProjectID: ref.ProjectID, EntityID: ref.EntityID, ContentDigest: ref.ContentDigest, Version: ref.Version, ExpiresAt: time.Now().Add(30 * time.Second)}}}, nil
+	}
+	v, err := s.ValidateLineage(context.Background(), scope, []LineageRef{ref})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.Results[0].ExpiresAt.Before(ref.ExpiresAt) {
+		t.Fatalf("shortened owner expiry %s was not preserved in result", v.Results[0].ExpiresAt)
+	}
+
+	config.MaxResponseBytes = 10
+	smallService, err := NewService(config, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := smallService.ValidateLineage(context.Background(), scope, []LineageRef{ref}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("oversized lineage response error = %v, want ErrInvalid", err)
+	}
+}
+
 func TestReadAcceptsMappedTypedFixtureAndRejectsScopeEscape(t *testing.T) {
 	r := &fixtureReader{qualification: completeQualification()}
 	r.read = func(_ context.Context, scope Scope, _ Limits) (Bundle, error) {

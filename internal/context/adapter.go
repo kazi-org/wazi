@@ -94,10 +94,15 @@ func (s *Service) ValidateLineage(ctx context.Context, scope Scope, refs []Linea
 	if !mapped || !sameScope(scope, expectedScope) || len(refs) == 0 {
 		return LineageValidation{}, ErrInvalid
 	}
+	seenRequested := make(map[string]bool, len(refs))
 	for _, r := range refs {
 		if r.ReferenceID == "" || r.ContentDigest == "" || r.Version == "" || r.BrainID != scope.BrainID || r.AudienceID != scope.AudienceID || r.ProjectID != scope.ProjectID || !scopeAllows(scope, r.EntityID, r.ReferenceID) {
 			return LineageValidation{}, ErrInvalid
 		}
+		if seenRequested[r.ReferenceID] {
+			return LineageValidation{}, fmt.Errorf("%w: duplicate requested lineage reference", ErrInvalid)
+		}
+		seenRequested[r.ReferenceID] = true
 	}
 	v, err := s.reader.ValidateLineage(ctx, scope, refs)
 	if err != nil {
@@ -105,6 +110,10 @@ func (s *Service) ValidateLineage(ctx context.Context, scope Scope, refs []Linea
 	}
 	if v.ValidatedAt.IsZero() || v.ValidatedAt.After(time.Now()) || len(v.Results) != len(refs) {
 		return LineageValidation{}, fmt.Errorf("%w: incomplete lineage result set", ErrInvalid)
+	}
+	encoded, err := json.Marshal(v)
+	if err != nil || len(encoded) > s.config.MaxResponseBytes {
+		return LineageValidation{}, fmt.Errorf("%w: lineage response exceeds configured bound", ErrInvalid)
 	}
 	byID := make(map[string]LineageResult, len(v.Results))
 	for _, got := range v.Results {
@@ -135,7 +144,6 @@ func validateBundle(scope Scope, b Bundle, lim Limits) error {
 	if !sameScope(b.Scope, scope) || b.FetchedAt.IsZero() || b.ValidTo.IsZero() || !time.Now().Before(b.ValidTo) {
 		return fmt.Errorf("%w: invalid scope or validity", ErrInvalid)
 	}
-	allowedEntities, allowedRefs := setOf(scope.EntityIDs), setOf(scope.ReferenceIDs)
 	count, bytes := 0, 0
 	seenRefs := make(map[string]bool)
 	for sectionName := range b.Sections {
@@ -154,9 +162,6 @@ func validateBundle(scope Scope, b Bundle, lim Limits) error {
 		for _, r := range section.Records {
 			if r.ReferenceID == "" || r.BrainID != scope.BrainID || r.AudienceID != scope.AudienceID || r.ProjectID != scope.ProjectID || !scopeAllows(scope, r.EntityID, r.ReferenceID) || r.ContentDigest == "" || r.Version == "" || r.FetchedAt.IsZero() || r.ExpiresAt.IsZero() || !time.Now().Before(r.ExpiresAt) || r.ExpiresAt.After(b.ValidTo) || r.Kind != kindFor(sectionName) {
 				return fmt.Errorf("%w: record outside selected scope or without current provenance", ErrInvalid)
-			}
-			if len(allowedEntities) > 0 && r.EntityID != "" && !allowedEntities[r.EntityID] || len(allowedRefs) > 0 && !allowedRefs[r.ReferenceID] {
-				return fmt.Errorf("%w: unmapped owner reference", ErrInvalid)
 			}
 			if seenRefs[r.ReferenceID] {
 				return fmt.Errorf("%w: duplicate owner reference", ErrInvalid)
