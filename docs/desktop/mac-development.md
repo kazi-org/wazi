@@ -19,3 +19,7 @@ Close the window or use Command-Q to quit. The app closes its owned host input p
 Host or web-content failure clears the old web view and presents a native unavailable state. Restart requires an explicit click. No uncertain AI request is automatically repeated. The desktop launcher does not enable OpenRouter and removes inherited provider credentials from the child environment. Serenity context remains honestly unavailable until its project-scoped adapter is separately qualified.
 
 Diagnostics are bounded startup/lifecycle categories; do not include plan text, answer bodies or credentials in bug reports. Preserve the previous bundle for rollback, quit the current app, then open the previous qualified bundle with the same data profile. Rollback does not delete private data or sidecars. Signed distribution, notarization, Intel qualification, older-runtime acceptance and Windows/Linux Wails delivery are future work.
+
+## Accessibility follow-up
+
+Owner-approved phase1 local acceptance includes AX labels/semantics and keyboard use. Spoken VoiceOver output remains unqualified; explicitly test announced window controls, project/task navigation, code preview, importer and recovery actions in a future accessibility qualification session. This follow-up is outside the accepted local prototype merge gate and remains required before claiming spoken screen-reader qualification.
