@@ -1,8 +1,9 @@
+import waziLogo from './assets/wazi-logo.png';
 import DesktopChrome from './DesktopChrome.jsx';
 import {getDesktopBridge} from './desktop.mjs';
 import {ObservatoryPanel} from './ObservatoryPanel.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpRight, ArrowsOut, ArrowsClockwise, Cube, SquaresFour, FolderSimple, FileText, UploadSimple, CaretRight, CaretLeft, CaretDown, X, LinkSimple, CheckCircle, Circle, LockSimple, SpinnerGap, Crosshair, MagnifyingGlass, Keyboard, List, ArrowLeft, Plus, Minus, Planet, Info } from '@phosphor-icons/react';
+import { ArrowUpRight, ArrowsOut, ArrowsClockwise, Cube, SquaresFour, FolderSimple, FileText, UploadSimple, CaretRight, CaretLeft, CaretDown, X, LinkSimple, CheckCircle, Circle, LockSimple, SpinnerGap, Crosshair, MagnifyingGlass, Keyboard, List, ArrowLeft, Plus, Minus, Info } from '@phosphor-icons/react';
 import Space from './Space.jsx';
 import { sampleProject, statusLabel, lanes, laneFor } from './demo.mjs';
 import { parsePlan } from './plan-parser.mjs';
@@ -89,7 +90,7 @@ export default function App(){
   return <div className={`app-shell ${getDesktopBridge(window)?'native-desktop':''}`}>
     <DesktopChrome/>
     <aside role={workspaceOpen?'dialog':undefined} aria-modal={workspaceOpen||undefined} aria-label="Workspace" className={`sidebar ${workspaceExpanded?'expanded':'compact'} ${workspaceOpen?'open':''}`}>
-      <a className="brand" href="#" aria-label="Wazi plan observatory" title="Wazi plan observatory" onClick={e=>e.preventDefault()}><Planet size={30} weight="duotone"/><span>wazi<span className="brand-dot">.</span></span><small>PLAN OBSERVATORY</small></a>
+      <a className="brand" href="#" aria-label="Wazi plan observatory" title="Wazi plan observatory" onClick={e=>e.preventDefault()}><img className="brand-logo" src={waziLogo} width="30" height="30" alt=""/><span>wazi<span className="brand-dot">.</span></span><small>PLAN OBSERVATORY</small></a>
       <div className="workspace-heading"><span>YOUR WORKSPACE</span><div className="workspace-heading-actions"><button className="icon-btn sidebar-expand-toggle" aria-label={workspaceExpanded?'Collapse project sidebar':'Expand project sidebar'} title={workspaceExpanded?'Collapse project sidebar':'Expand project sidebar'} aria-expanded={workspaceExpanded} aria-controls="project-navigation" onClick={()=>setWorkspaceExpanded(value=>!value)}>{workspaceExpanded?<CaretLeft size={16}/>:<CaretRight size={16}/>}</button><button className="icon-btn" aria-label="Refresh local projects" title="Refresh local projects" onClick={loadPlans}><ArrowsClockwise size={15} className={loading?'spin':''}/></button></div></div>
       <button className={`project-row sample ${project.sample?'is-active':''}`} title="Wazi observatory · Example plan" aria-label="Wazi observatory, example plan" aria-current={project.sample?'page':undefined} onClick={()=>selectProject(sampleProject)}><Cube size={19} weight="duotone"/><span><strong>Wazi observatory</strong><small>Example plan</small></span><CaretRight size={13}/></button>
       <div className="local-heading"><span>LOCAL PROJECTS</span><span>{loading?'…':localProjects.length}</span></div>
