@@ -24,6 +24,10 @@ import (
 var desktopDiagnostics bool
 
 func main() {
+	if len(os.Args) == 1 {
+		printUsage(os.Stdout)
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "repair" {
 		os.Exit(runRepair(os.Args[2:], os.Stdout, os.Stderr))
 	}
@@ -182,6 +186,17 @@ func main() {
 			fatal(err.Error())
 		}
 	}
+}
+
+func printUsage(out io.Writer) {
+	fmt.Fprintln(out, "Wazi local plan observatory")
+	fmt.Fprintln(out, "Usage:")
+	fmt.Fprintln(out, "  wazi repair [--save-candidate] [--data DIR] FILE.md")
+	fmt.Fprintln(out, "  wazi repair --apply-candidate ID [--data DIR]")
+	fmt.Fprintln(out, "  wazi [host flags]                         start the developer host")
+	fmt.Fprintln(out, "  wazi [host flags] --assets DIR            use an explicit frontend directory")
+	fmt.Fprintln(out, "Host flags include --root, --assets, --data, --node, --bridge, and --port; defaults are for local development.")
+	fmt.Fprintln(out, "Run 'wazi repair --help' for repair options. No browser, desktop app, or provider starts from this help screen.")
 }
 func mustwd() string { x, e := os.Getwd(); check(e); return x }
 func check(e error) {
