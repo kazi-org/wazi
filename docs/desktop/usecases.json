@@ -7,7 +7,7 @@
       "name": "Launch the self-contained local app",
       "priority": "P0",
       "actor": "local_user",
-      "wiring_status": "PLANNED",
+      "wiring_status": "IMPLEMENTED",
       "status": "qualified-local-prototype"
     },
     {
@@ -15,7 +15,7 @@
       "name": "Operate the frameless observatory window",
       "priority": "P0",
       "actor": "local_user",
-      "wiring_status": "PLANNED",
+      "wiring_status": "IMPLEMENTED",
       "status": "qualified-local-prototype"
     },
     {
@@ -23,7 +23,7 @@
       "name": "Navigate selected project plan/code/context",
       "priority": "P0",
       "actor": "local_user",
-      "wiring_status": "PLANNED",
+      "wiring_status": "IMPLEMENTED",
       "status": "qualified-local-prototype"
     },
     {
@@ -31,7 +31,7 @@
       "name": "Keep source, credentials and navigation confined",
       "priority": "P0",
       "actor": "local_user",
-      "wiring_status": "PLANNED",
+      "wiring_status": "IMPLEMENTED",
       "status": "qualified-local-prototype"
     },
     {
@@ -39,7 +39,7 @@
       "name": "Recover explicitly from host/webview failure",
       "priority": "P0",
       "actor": "local_user",
-      "wiring_status": "PLANNED",
+      "wiring_status": "IMPLEMENTED",
       "status": "qualified-local-prototype"
     },
     {
@@ -47,7 +47,7 @@
       "name": "Install and verify a reproducible local bundle",
       "priority": "P1",
       "actor": "local_user",
-      "wiring_status": "PLANNED",
+      "wiring_status": "IMPLEMENTED",
       "status": "qualified-local-prototype"
     }
   ],
