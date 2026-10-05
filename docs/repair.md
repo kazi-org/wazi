@@ -9,7 +9,7 @@ go build -o /path/to/bin/wazi ./cmd/wazi
 
 Preview shows source/candidate SHA256 digests, the exact syntax diff and line/field diagnostics. It writes no files. Repair only normalizes unequivocal checkbox syntax. Missing IDs, owner, stage or acceptance must be authored explicitly in the source; repair does not invent intent. Unsupported stages remain visible. Ordinary Markdown validity is separate from portable JSON conformance and task completion.
 
-To save a reviewed candidate, choose a private data directory outside the selected repository:
+To save a reviewed candidate, choose a private data directory outside the selected repository (or outside the source folder for a standalone plan):
 
 ```sh
 wazi repair --data /private/wazi-repair --save-candidate /path/to/project/docs/plan.md

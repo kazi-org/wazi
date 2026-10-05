@@ -120,3 +120,18 @@ func TestRepairSubprocessSaveApplyAndStaleRefusal(t *testing.T) {
 		t.Fatal("AI should fail disabled privately", string(out))
 	}
 }
+
+func TestRepairNoChangeSaveDoesNotWrite(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "plan.md")
+	if e := os.WriteFile(path, []byte("# Sample\n- [ ] T1.0 Meaning Owner: owner stage: implement acc: [observable]\n"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	data := filepath.Join(t.TempDir(), "absent")
+	var out, errs bytes.Buffer
+	if code := runRepair([]string{"--save-candidate", "--data", data, path}, &out, &errs); code != 0 {
+		t.Fatal(code, errs.String())
+	}
+	if _, e := os.Stat(data); !os.IsNotExist(e) {
+		t.Fatal("no-op save created candidate data")
+	}
+}

@@ -68,6 +68,9 @@ func TestSaveRequiresPrivateOutsideStoreAndIsIdempotent(t *testing.T) {
 	if _, err := Save(filepath.Join(repo, "private"), s, c, "p"); err == nil {
 		t.Fatal("accepted in-repo store")
 	}
+	if _, err := os.Stat(filepath.Join(repo, "private")); !os.IsNotExist(err) {
+		t.Fatal("refused in-repo save created directories")
+	}
 	if err := os.MkdirAll(store, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -325,5 +328,51 @@ func TestApplyDoesNotReplaceIfFinalCASChanged(t *testing.T) {
 	got, err := os.ReadFile(s.Path)
 	if err != nil || string(got) != "different" {
 		t.Fatalf("source=%q err=%v", got, err)
+	}
+}
+
+func TestBackupSyncFailureLeavesOriginalAndRecoveryRestoresBytes(t *testing.T) {
+	_, _, store, source, _, manifest := saved(t)
+	failure := errors.New("backup sync failed")
+	if _, err := applyWithSync(store, manifest.ID, func(string) error { return failure }); !errors.Is(err, failure) {
+		t.Fatalf("expected backup sync failure: %v", err)
+	}
+	got, err := os.ReadFile(source.Path)
+	if err != nil || string(got) != string(source.Bytes) {
+		t.Fatalf("source changed before durable backup: %v", err)
+	}
+	backup, err := Apply(store, manifest.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.ReadFile(backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(source.Path, original, source.Mode.Perm()); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := os.ReadFile(source.Path)
+	if err != nil || string(restored) != string(source.Bytes) {
+		t.Fatal("explicit backup restoration did not restore exact bytes", err)
+	}
+}
+
+func TestNoGitPlanStillRejectsCandidateStorageInSourceFolder(t *testing.T) {
+	folder := t.TempDir()
+	path := filepath.Join(folder, "plan.md")
+	if err := os.WriteFile(path, []byte("original\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	source, err := ReadSource(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := filepath.Join(folder, "private")
+	if _, err = Save(store, source, []byte("candidate\n"), "profile"); err == nil {
+		t.Fatal("accepted store in standalone plan folder")
+	}
+	if _, err = os.Stat(store); !os.IsNotExist(err) {
+		t.Fatal("rejected store created directory")
 	}
 }

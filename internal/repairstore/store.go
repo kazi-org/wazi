@@ -297,7 +297,10 @@ func prepareStoreWithSync(dir, source string, syncDirectory func(string) error) 
 	root = filepath.Clean(root)
 	if source != "" {
 		gitRoot := findGitRoot(source)
-		if gitRoot != "" && within(root, gitRoot) {
+		if gitRoot == "" {
+			gitRoot = filepath.Dir(source)
+		}
+		if within(root, gitRoot) {
 			return "", fmt.Errorf("%w: store must be outside source repository", ErrInvalidStore)
 		}
 	}
