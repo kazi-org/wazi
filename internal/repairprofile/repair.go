@@ -20,7 +20,6 @@ var (
 	taskPattern       = regexp.MustCompile(`^([ \t]*)([-*+])[ \t]+\[([ \t]*[xX~-]?[ \t]*)\][ \t]+(.+)$`)
 	idPattern         = regexp.MustCompile(`(?i)^(?:[A-Z][A-Z0-9]*(?:[.-][A-Z0-9]+)+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b`)
 	fieldPattern      = regexp.MustCompile(`(?i)(?:^|[ \t])([A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)*)[ \t]*:`)
-	malformedField    = regexp.MustCompile(`(?i)(?:^|[ \t])(owner|stage|acc|acceptance)[ \t]+[^:\n]+`)
 	bracketList       = regexp.MustCompile(`^[ \t]*[-*+][ \t]+\[[^]]*\]`)
 	continuationField = regexp.MustCompile(`^\s*[A-Za-z][A-Za-z0-9_-]*\s*:`)
 )
@@ -195,10 +194,7 @@ func inspectTasks(tasks []task, lines []sourceLine, diagnostics *[]Diagnostic) {
 			}
 			block += "\n" + continuation
 		}
-		fields, malformed := parseFields(block)
-		if malformed {
-			*diagnostics = append(*diagnostics, Diagnostic{t.line, "metadata", "malformed metadata annotation; clarify the field and value", true})
-		}
+		fields := parseFields(block)
 		for _, name := range []string{"owner", "stage", "acc"} {
 			values := fields[name]
 			if name == "acc" {
@@ -270,7 +266,7 @@ func metadataContinuation(line string) bool {
 	return continuationField.MatchString(line)
 }
 
-func parseFields(text string) (map[string][]string, bool) {
+func parseFields(text string) map[string][]string {
 	fields := map[string][]string{}
 	all := fieldPattern.FindAllStringSubmatchIndex(text, -1)
 	idx := make([][]int, 0, len(all))
@@ -279,7 +275,6 @@ func parseFields(text string) (map[string][]string, bool) {
 			idx = append(idx, m)
 		}
 	}
-	malformed := false
 	for n, m := range idx {
 		name := strings.ToLower(text[m[2]:m[3]])
 		if name != "owner" && name != "stage" && name != "acc" && name != "acceptance" {
@@ -293,14 +288,7 @@ func parseFields(text string) (map[string][]string, bool) {
 		value := strings.TrimSpace(text[valueStart:valueEnd])
 		fields[name] = append(fields[name], value)
 	}
-	// Only inspect labels outside bracketed values; acceptance bodies are opaque.
-	for _, match := range malformedField.FindAllStringSubmatchIndex(text, -1) {
-		if bracketDepthAt(text, match[2]) == 0 {
-			malformed = true
-			break
-		}
-	}
-	return fields, malformed
+	return fields
 }
 
 func bracketDepthAt(s string, end int) int {
