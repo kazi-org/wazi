@@ -92,3 +92,7 @@ The owner selected the first generated aperture design to replace the planet log
 ### Planned explicit repair command
 
 The owner requested the top-level `wazi repair` command. E11 plans a separate, explicit source-repair CLI: deterministic Markdown preview first, owner-applied exact candidate with conflict checks and recoverable backup, and optional EXPLABS proposals. The browser/desktop observatory stays read-only. Existing Markdown authoring guidance and the frozen portable JSON contract are separate authorities; preflight must qualify the chosen profile without inventing task meaning or evidence. This is planned work, with no command implementation or backend call included in the planning artifact.
+
+## Explicit deterministic plan repair
+
+E11 adds a top-level CLI operation before legacy host flag parsing. Its frozen ordinary Markdown profile is separate from portable JSON and completion evidence. Preview performs no writes; explicitly saved source-bound candidates live outside the selected repository, and apply uses a private exact backup plus guarded atomic replacement. Missing semantics remain owner-authored diagnostics. The browser and Mac app remain read-only. Optional EXPLABS and interactive proposal modes are explicitly unavailable in this first local delivery; no dotenv is loaded. See [profile](plans/E11-repair-profile.md) and [usage](repair.md).

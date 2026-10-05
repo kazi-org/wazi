@@ -24,6 +24,10 @@ import (
 var desktopDiagnostics bool
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "repair" {
+		os.Exit(runRepair(os.Args[2:], os.Stdout, os.Stderr))
+	}
+
 	root := flag.String("root", "", "bounded plan discovery root")
 	assets := flag.String("assets", "dist/client", "built frontend directory")
 	data := flag.String("data", "", "private app data directory")
