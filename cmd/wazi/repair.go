@@ -98,6 +98,10 @@ func runRepair(args []string, out, errOut io.Writer) int {
 		return 1
 	}
 	if *save {
+		if string(source.Bytes) == string(result.Candidate) {
+			fmt.Fprintln(out, "No syntax changes to save; no candidate written.")
+			return 0
+		}
 		m, e := repairstore.Save(storeDir, source, result.Candidate, "wazi-markdown-syntax-20261004")
 		if e != nil {
 			fmt.Fprintln(errOut, "candidate save refused:", e)
@@ -106,7 +110,7 @@ func runRepair(args []string, out, errOut io.Writer) int {
 		if e = json.NewEncoder(out).Encode(m); e != nil {
 			return 1
 		}
-		fmt.Fprintln(out, "Apply explicitly with: wazi repair --data", storeDir, "--apply-candidate", m.ID)
+		fmt.Fprintln(out, "Apply explicitly with: wazi repair --data", shellArgument(storeDir), "--apply-candidate", m.ID)
 	} else {
 		fmt.Fprintln(out, "Preview only; no files written. Use --save-candidate to retain this proposal.")
 	}
@@ -141,3 +145,5 @@ func printRepairDiff(w io.Writer, original, candidate []byte) {
 		}
 	}
 }
+
+func shellArgument(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
