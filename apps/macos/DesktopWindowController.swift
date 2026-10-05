@@ -117,6 +117,29 @@ final class DesktopWindowController: NSWindowController, NSWindowDelegate, WKNav
               invokeButtonAction(title: "Quit Wazi", in: controller.window?.contentView),
               quitCount == 2 else { throw RecoveryTestError.replacementFailed }
 
+        var terminationCount = 0
+        controller.onWebContentFailure = { [weak controller] in
+            terminationCount += 1
+            controller?.showRecovery(title: "Wazi stopped", message: "Web content test")
+        }
+        weak var terminatedWebView: WKWebView? = nil
+        do {
+            let ownedWebView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+            controller.webView = ownedWebView
+            controller.pinnedOrigin = URL(string: "http://127.0.0.1:1")
+            controller.setContent(ownedWebView)
+            terminatedWebView = ownedWebView
+            controller.webViewWebContentProcessDidTerminate(ownedWebView)
+        }
+        guard terminatedWebView == nil,
+              controller.webView == nil,
+              controller.recoveryController != nil,
+              terminationCount == 1,
+              invokeButtonAction(title: "Restart Wazi", in: controller.window?.contentView),
+              restartCount == 3,
+              invokeButtonAction(title: "Quit Wazi", in: controller.window?.contentView),
+              quitCount == 3 else { throw RecoveryTestError.terminationRecoveryFailed }
+
         weak var closingRecovery: RecoveryViewController? = controller.recoveryController
         controller.windowWillClose(Notification(name: NSWindow.willCloseNotification, object: controller.window))
         guard closingRecovery == nil else { throw RecoveryTestError.closeDidNotRelease }
@@ -134,6 +157,7 @@ final class DesktopWindowController: NSWindowController, NSWindowDelegate, WKNav
     private enum RecoveryTestError: Error {
         case actionNotDelivered
         case replacementFailed
+        case terminationRecoveryFailed
         case closeDidNotRelease
     }
 

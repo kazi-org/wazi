@@ -6,6 +6,8 @@
 	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>Wazi</string>
+	<key>CFBundleIconFile</key>
+	<string>Wazi</string>
 	<key>CFBundleIdentifier</key>
 	<string>org.kazi.wazi</string>
 	<key>CFBundleInfoDictionaryVersion</key>
