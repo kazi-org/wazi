@@ -153,6 +153,13 @@ func Apply(dir, id string) (string, error) {
 }
 
 func applyWithSync(dir, id string, syncDirectory func(string) error) (string, error) {
+	return applyWithSourceLockHook(dir, id, syncDirectory, nil)
+}
+
+// applyWithSourceLockHook exposes a synchronization point to filesystem tests
+// after the original source descriptor is opened and before its flock is
+// acquired. Production calls use no hook.
+func applyWithSourceLockHook(dir, id string, syncDirectory func(string) error, beforeSourceLock func()) (string, error) {
 	if !validID(id) {
 		return "", fmt.Errorf("%w: invalid candidate id", ErrInvalidStore)
 	}
@@ -216,9 +223,30 @@ func applyWithSync(dir, id string, syncDirectory func(string) error) (string, er
 		return "", fmt.Errorf("reopen source: %w", err)
 	}
 	defer f.Close()
+	opened, err := f.Stat()
+	if err != nil {
+		return "", err
+	}
+	if beforeSourceLock != nil {
+		beforeSourceLock()
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		return "", fmt.Errorf("lock repair source: %w", err)
+	}
+	// The descriptor may have waited on the old inode while another process
+	// atomically replaced the canonical path. In that case its flock no longer
+	// protects the file currently named by the source path.
+	canonicalAfterLock, canonicalErr := canonicalNoSymlinks(m.SourcePath)
+	pathAfterLock, pathErr := os.Lstat(p)
+	if canonicalErr != nil || canonicalAfterLock != m.SourcePath || pathErr != nil || !sameInode(identity(opened), identity(pathAfterLock)) {
+		return "", ErrStale
+	}
 	initial, err := f.Stat()
 	if err != nil {
 		return "", err
+	}
+	if !sameInode(identity(opened), identity(initial)) {
+		return "", ErrStale
 	}
 	if !initial.Mode().IsRegular() || initial.Mode()&os.ModeSetuid != 0 || initial.Mode()&os.ModeSetgid != 0 || initial.Mode()&os.ModeSticky != 0 {
 		return "", fmt.Errorf("%w: special source mode refused", ErrInvalidSource)
@@ -544,7 +572,7 @@ func makePrivateDir(parent, path string, syncParent func(string) error) error {
 	return nil
 }
 func openNoFollow(p string) (*os.File, error) {
-	fd, e := syscall.Open(p, syscall.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	fd, e := syscall.Open(p, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if e != nil {
 		return nil, e
 	}
@@ -562,6 +590,7 @@ func identity(st os.FileInfo) fileIdentity {
 func sameIdentity(a, b fileIdentity) bool {
 	return a.dev == b.dev && a.ino == b.ino && a.mode == b.mode && a.size == b.size && a.mtime == b.mtime
 }
+func sameInode(a, b fileIdentity) bool { return a.dev == b.dev && a.ino == b.ino }
 func validID(s string) bool {
 	if len(s) != 64 {
 		return false
