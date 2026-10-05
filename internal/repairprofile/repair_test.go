@@ -76,6 +76,24 @@ func TestTransformTreatsAcceptanceAsOpaqueAndBlocksEmptyValue(t *testing.T) {
 	}
 }
 
+func TestTransformDoesNotInterpretOwnerValueWordsAsMalformedFields(t *testing.T) {
+	for _, owner := range []string{"owner", "stage worker"} {
+		t.Run(owner, func(t *testing.T) {
+			source := []byte("* [X] T1.0 Do work Owner: " + owner + " kind: agent stage: implement acc: [observable result]\n")
+			got, err := Transform(source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got.Diagnostics) != 0 {
+				t.Fatalf("ordinary owner value was misdiagnosed: %#v", got.Diagnostics)
+			}
+			if !bytes.Contains(got.Candidate, []byte("Owner: "+owner+" kind: agent")) {
+				t.Fatalf("owner value changed: %q", got.Candidate)
+			}
+		})
+	}
+}
+
 func TestTransformDiagnosesIdentityAndSemanticAmbiguity(t *testing.T) {
 	source := []byte("- [ ] T1.0 A Owner: Ada Owner: Bo stage: magical acc: [unfinished\n  continuation\n- [ ] T1.0 B stage: implement acc: [ok]\n- [ ] NoId Owner: C acc: [ok]\n- [x x] T1.2 Odd Owner: D stage: verify acc: [ok]\n")
 	got, err := Transform(source)
