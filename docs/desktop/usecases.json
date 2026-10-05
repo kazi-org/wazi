@@ -58,6 +58,8 @@
     "spokenVoiceOver": "owner-approved-follow-up",
     "intelAndOlderRuntime": "unqualified",
     "receipt": "../devlog.md",
-    "providers": "no-live-calls"
-  }
+    "providers": "no-live-calls",
+    "landedCommit": "67d4a5e6ccb83ee184c10817b2906683b4982367"
+  },
+  "wiring_status": "IMPLEMENTED"
 }
