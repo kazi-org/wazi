@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -58,7 +59,12 @@ func runRepair(args []string, out, errOut io.Writer) int {
 		}
 		backup, e := repairstore.Apply(storeDir, *apply)
 		if e != nil {
-			fmt.Fprintln(errOut, "apply refused:", e)
+			if errors.Is(e, repairstore.ErrApplyUncertain) {
+				fmt.Fprintln(errOut, "Apply durability uncertain: inspect source and compare candidate/original digests before taking another action.")
+				fmt.Fprintln(errOut, "Original backup:", backup)
+			} else {
+				fmt.Fprintln(errOut, "apply refused:", e)
+			}
 			return 1
 		}
 		fmt.Fprintln(out, "Applied exact candidate. Original backup:", backup)
