@@ -220,3 +220,11 @@ Icon candidate467d5ce also passed actual host-crash/no-auto-restart, explicit Re
 ## Owner-selected aperture logo -- 2026-10-04
 
 The selected PNG is preserved byte-for-byte as the shared header/icon source; SHA2561614059c486c0c7df6e8840a662b02c30f3ad331815c2dbbc816e5939b0ab0eb. ICNS conversion changes size/format only; the bundle now records generated-image provenance, keeping Phosphor notice for other UI icons. Candidatea77259c passed native37259831484 and regression37259831463. Actual installed WKWebView shows the aperture in collapsed navigation and expanded fullscreen header with readable wordmark and preserved3D space. First expanded snapshots retained narrow transition geometry until native resize; this is recorded as capture evidence, not a proven logo regression. Preliminary independent source reviewPASS; merge/landed gates remain. Shared local build lease was held by another project and preserved; hosted CI supplied build evidence.
+
+## Aperture identity landed verification
+
+PR7 guarded rebase landed360141ec71983f4db11068a8609357c4585d2084 after exact015ecac independent PASS and current CI. Reviewed/landed trees match. Main native37260736461 and regression37260736435 passed. Installed exact-main manifest, resource/icon hashes, signatures and arm64 checks pass; bundled header PNG is byte-identical to the selected source. Actual main-built WKWebView shows the aperture and existing sample3D/collapsible navigation. E10 is complete. No provider calls, dependency changes, private evidence commits, release or deployment.
+
+## E11 repair planning -- 2026-10-04
+
+The requested command is top-level `wazi repair`. The executable future plan has 23 unchecked tasks. Deterministic preview, explicit private candidate saving and source-digest guarded apply with backup can land independently of optional AI. Preflight pins the current Markdown authoring profile; missing semantics are diagnosed rather than invented. Independent planning findings RPR-P01/P02 were accepted and corrected, removing routine owner gating and mandatory provider dependencies from the deterministic path. Configuration discovery checked variable-name presence only. No CLI implementation, source-plan rewrite or provider call occurred.
