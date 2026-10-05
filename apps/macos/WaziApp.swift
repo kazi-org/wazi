@@ -28,6 +28,17 @@ struct WaziDesktopApplication {
             }
         }
 
+        if CommandLine.arguments.contains("--recovery-test") {
+            do {
+                try DesktopWindowController.recoveryLifecycleSelfTest()
+                print("Wazi recovery lifecycle checks passed")
+                exit(EXIT_SUCCESS)
+            } catch {
+                fputs("Wazi recovery lifecycle check failed\n", stderr)
+                exit(EXIT_FAILURE)
+            }
+        }
+
         let application = NSApplication.shared
         application.setActivationPolicy(.regular)
         let delegate = WaziAppDelegate()
