@@ -155,4 +155,6 @@ User selected Swift/AppKit + WKWebView for Mac, Wails for Windows/Linux; phase1 
 ### E8 -- Phase 1 native frameless Mac desktop -> docs/plans/E8-native-mac-desktop.md (27/27)
 ### E9 -- Later Wails Windows/Linux delivery -> docs/plans/E9-wails-windows-linux.md (0/1)
 
-### E10 -- Owner-selected aperture identity -> docs/plans/E10-aperture-logo.md (3/5)
+### E10 -- Owner-selected aperture identity -> docs/plans/E10-aperture-logo.md (5/5)
+
+### E11 -- Explicit plan source repair -> docs/plans/E11-plan-repair.md (0/23)

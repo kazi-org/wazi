@@ -88,3 +88,7 @@ The Mac app and Dock icon reuse the interface's Phosphor Planet duotone mark, la
 ### Owner-selected aperture identity
 
 The owner selected the first generated aperture design to replace the planet logo in both the interface and native app. `src/assets/wazi-logo.png` is the exact selected source; the header imports it and `apps/macos/Wazi.icns` contains resized representations. Preserve the chosen composition rather than tracing a different vector approximation. The app icon notice records generated-image provenance; Phosphor notices remain for the other interface icons.
+
+### Planned explicit repair command
+
+The owner requested the top-level `wazi repair` command. E11 plans a separate, explicit source-repair CLI: deterministic Markdown preview first, owner-applied exact candidate with conflict checks and recoverable backup, and optional EXPLABS proposals. The browser/desktop observatory stays read-only. Existing Markdown authoring guidance and the frozen portable JSON contract are separate authorities; preflight must qualify the chosen profile without inventing task meaning or evidence. This is planned work, with no command implementation or backend call included in the planning artifact.
