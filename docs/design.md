@@ -84,3 +84,7 @@ A pure borderless window rendered correctly, but native pointer automation could
 ### Native application identity
 
 The Mac app and Dock icon reuse the interface's Phosphor Planet duotone mark, lavender `#a2afff` over `#0d111d`. Versioned SVG and ICNS live under `apps/macos/`; the bundle carries the icon's MIT notice. This preserves Wazi's current identity without introducing another logo.
+
+### Owner-selected aperture identity
+
+The owner selected the first generated aperture design to replace the planet logo in both the interface and native app. `src/assets/wazi-logo.png` is the exact selected source; the header imports it and `apps/macos/Wazi.icns` contains resized representations. Preserve the chosen composition rather than tracing a different vector approximation. The app icon notice records generated-image provenance; Phosphor notices remain for the other interface icons.

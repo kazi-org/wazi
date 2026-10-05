@@ -1,0 +1,7 @@
+Wazi aperture logo
+
+Original image generated with OpenAI Image Gen and selected by the Wazi owner.
+The versioned source is src/assets/wazi-logo.png. Wazi.icns is a size-converted
+representation of this exact selected image; the frontend uses the same source.
+This logo does not use Phosphor icon artwork. Other UI icons retain their
+separately bundled Phosphor MIT notice.

@@ -1,0 +1,14 @@
+# E10 -- Owner-selected aperture identity
+
+Acceptance: The exact selected aperture image appears in the app header and native app icon, with browser/native verification, independent exact-head review, rebase merge and landed checks.
+fidelity: executable
+
+Baseline: main3bd02f7, clean and reconciled. The owner chose the first generated aperture image explicitly. Source discovery found the Phosphor Planet component in `src/App.jsx`, the bundle ICNS and Info.plist binding, and the existing icon notice copy in the packager. One existing desktop identity use case (UC-DESK-002) is affected. Keep the selected raster unchanged; convert only dimensions/format for ICNS. No dependency, Three.js, Go, credential, provider or release changes. This small asset/component change has one implementation owner; independent review is a separate lane. Outputs/caches/worktrees stay on the external SSD.
+
+- [x] T10.0 Apply selected image to header and native icon Owner: coordinator Est: 20m kind: agent stage: implement verifies: [UC-DESK-002] acc: [versioned PNG matches selected image hash; header uses that source; ICNS derives from same image; icon notice describes actual provenance]
+- [ ] T10.1 Verify browser, icon resources and regression checks Owner: coordinator Est: 20m kind: agent stage: verify deps: [T10.0] verifies: [UC-DESK-002] acc: [actual browser shows selected logo; collapsed navigation and sample observatory remain usable; frontend tests/build and native bundle checks pass; private evidence remains outside Git]
+- [ ] T10.2 Independently review exact candidate Owner: independent-reviewer Est: 10m kind: agent stage: review deps: [T10.1] verifies: [UC-DESK-002] acc: [exact base/head, UI source/asset/packaging coverage and disposition recorded; no blocking findings]
+- [ ] T10.3 Rebase merge reviewed candidate Owner: coordinator Est: 5m kind: agent stage: merge deps: [T10.2] verifies: [UC-DESK-002] acc: [current head/base and CI rechecked; guarded GitHub rebase merge]
+- [ ] T10.4 Verify landed identity update Owner: coordinator Est: 10m kind: agent stage: verify-landed deps: [T10.3] verifies: [UC-DESK-002] acc: [reviewed/landed tree and reachability verified; main CI passes; exact landed bundle has selected icon and header; delivery recorded]
+
+Selected PNG SHA256: `1614059c486c0c7df6e8840a662b02c30f3ad331815c2dbbc816e5939b0ab0eb`. Local capability bindings: Git/gh, Node/npm, sips/iconutil and existing browser automation; existing Mac CI verifies compiler/package compatibility. No fresh code graph is available or necessary for this bounded asset seam.

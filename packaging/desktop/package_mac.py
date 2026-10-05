@@ -53,7 +53,7 @@ def assemble(repo, output, host, shell, assets, cache, sign=True):
     shutil.copy2(host, resources / 'host/wazi')
     shutil.copy2(repo / 'apps/macos/Info.plist', contents / 'Info.plist')
     shutil.copy2(repo / 'apps/macos/Wazi.icns', resources / 'Wazi.icns')
-    shutil.copy2(repo / 'apps/macos/PHOSPHOR-LICENSE.txt', resources / 'notices/WaziIcon-LICENSE.txt')
+    shutil.copy2(repo / 'apps/macos/WaziIcon-NOTICE.txt', resources / 'notices/WaziIcon-LICENSE.txt')
     with tarfile.open(archive, 'r:gz') as tf:
         for name, dest in [('bin/node', resources / 'runtime/node'), ('LICENSE', resources / 'notices/Node-LICENSE')]:
             member = tf.getmember(prefix + name)
