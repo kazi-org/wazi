@@ -125,7 +125,8 @@ final class DesktopWindowController: NSWindowController, NSWindowDelegate, WKNav
     private static func invokeButtonAction(title: String, in root: NSView?) -> Bool {
         guard let root else { return false }
         if let button = root as? NSButton, button.title == title {
-            return NSApplication.shared.sendAction(button.action, to: button.target, from: button)
+            guard let action = button.action, let target = button.target else { return false }
+            return NSApplication.shared.sendAction(action, to: target, from: button)
         }
         return root.subviews.contains { invokeButtonAction(title: title, in: $0) }
     }
