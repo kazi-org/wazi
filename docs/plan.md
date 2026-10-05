@@ -159,4 +159,4 @@ User selected Swift/AppKit + WKWebView for Mac, Wails for Windows/Linux; phase1 
 
 ### E11 -- Explicit plan source repair -> docs/plans/E11-plan-repair.md (22/32)
 
-### E12 -- Local command and application discovery -> docs/plans/E12-local-command-usability.md (3/7)
+### E12 -- Local command and application discovery -> docs/plans/E12-local-command-usability.md (6/7)
