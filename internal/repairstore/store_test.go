@@ -90,6 +90,67 @@ func TestSaveRequiresPrivateOutsideStoreAndIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestCanonicalStoreCreationSyncsEachParentAndStopsOnFailure(t *testing.T) {
+	base := t.TempDir()
+	path := filepath.Join(base, "one", "two", "store")
+	var parents []string
+	wantFailure := errors.New("injected directory sync failure")
+	_, err := canonicalPathCreateWithSync(path, func(parent string) error {
+		parents = append(parents, parent)
+		if len(parents) == 2 {
+			return wantFailure
+		}
+		return nil
+	})
+	if !errors.Is(err, wantFailure) {
+		t.Fatalf("want injected sync error, got %v", err)
+	}
+	want := []string{base, filepath.Join(base, "one")}
+	if len(parents) != len(want) {
+		t.Fatalf("synced parents=%v", parents)
+	}
+	for i := range want {
+		if parents[i] != want[i] {
+			t.Fatalf("synced parents=%v", parents)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(base, "one", "two")); err != nil {
+		t.Fatalf("expected second directory to exist before its parent-sync failure: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(base, "one", "two", "store")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("created child after sync failure: %v", err)
+	}
+}
+
+func TestSaveStopsBeforeCandidateFilesWhenEntryParentSyncFails(t *testing.T) {
+	_, _, store, source, candidate := fixture(t)
+	root, err := filepath.Abs(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantFailure := errors.New("injected parent sync failure")
+	_, err = saveWithSync(store, source, candidate, "test-profile", func(parent string) error {
+		if parent == root {
+			return wantFailure
+		}
+		return syncDir(parent)
+	})
+	if !errors.Is(err, wantFailure) {
+		t.Fatalf("want injected sync error, got %v", err)
+	}
+	if _, err := os.Stat(root); err != nil {
+		t.Fatalf("store root should have been created before entry sync: %v", err)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("expected only candidate directory, entries=%v err=%v", entries, err)
+	}
+	files, err := os.ReadDir(filepath.Join(root, entries[0].Name()))
+	if err != nil || len(files) != 0 {
+		t.Fatalf("candidate files appeared before entry parent sync: files=%v err=%v", files, err)
+	}
+}
+
 func TestApplyExactBackupPermissionsAndNeighbor(t *testing.T) {
 	_, repo, store, s, c, m := saved(t)
 	backup, err := Apply(store, m.ID)
@@ -120,6 +181,36 @@ func TestApplyExactBackupPermissionsAndNeighbor(t *testing.T) {
 	neighbor, err := os.ReadFile(filepath.Join(repo, "neighbor.md"))
 	if err != nil || string(neighbor) != "untouched\n" {
 		t.Fatalf("neighbor=%q err=%v", neighbor, err)
+	}
+}
+
+func TestApplyReturnsBackupWhenPostRenameDirectorySyncFails(t *testing.T) {
+	_, _, store, source, candidate, manifest := saved(t)
+	wantFailure := errors.New("injected parent directory sync failure")
+	syncCalls := 0
+	backup, err := applyWithSync(store, manifest.ID, func(path string) error {
+		syncCalls++
+		if syncCalls == 1 {
+			return syncDir(path)
+		} // backup entry is durable first
+		if syncCalls == 2 {
+			return wantFailure
+		} // source rename has completed
+		return syncDir(path)
+	})
+	if !errors.Is(err, ErrApplyUncertain) || !errors.Is(err, wantFailure) {
+		t.Fatalf("want uncertain apply wrapping injected failure, got backup=%q err=%v", backup, err)
+	}
+	if backup == "" {
+		t.Fatal("uncertain apply omitted the known backup path")
+	}
+	gotBackup, readErr := os.ReadFile(backup)
+	if readErr != nil || string(gotBackup) != string(source.Bytes) {
+		t.Fatalf("backup=%q err=%v", gotBackup, readErr)
+	}
+	gotSource, readErr := os.ReadFile(source.Path)
+	if readErr != nil || string(gotSource) != string(candidate) {
+		t.Fatalf("source=%q err=%v", gotSource, readErr)
 	}
 }
 
