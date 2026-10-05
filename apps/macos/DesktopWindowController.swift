@@ -10,6 +10,7 @@ final class DesktopWindowController: NSWindowController, NSWindowDelegate, WKNav
     var onWebContentFailure: (() -> Void)?
 
     private var webView: WKWebView?
+    private var recoveryController: RecoveryViewController?
     private var pinnedOrigin: URL?
     private var dragEventMonitor: Any?
     private var pendingDragEvent: NSEvent?
@@ -48,6 +49,7 @@ final class DesktopWindowController: NSWindowController, NSWindowDelegate, WKNav
         let view = RecoveryViewController(title: "Starting Wazi", message: "Opening the local observatory…", showsRestart: false)
         view.onQuit = { [weak self] in self?.onQuit?() }
         setContent(view.view)
+        recoveryController = view
     }
 
     func showRecovery(title: String = "Wazi stopped", message: String) {
@@ -56,10 +58,12 @@ final class DesktopWindowController: NSWindowController, NSWindowDelegate, WKNav
         view.onRestart = { [weak self] in self?.onRestart?() }
         view.onQuit = { [weak self] in self?.onQuit?() }
         setContent(view.view)
+        recoveryController = view
     }
 
     func showWeb(at origin: URL) {
         discardWebView()
+        recoveryController = nil
         pinnedOrigin = origin
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
@@ -87,7 +91,49 @@ final class DesktopWindowController: NSWindowController, NSWindowDelegate, WKNav
 
     func windowWillClose(_ notification: Notification) {
         discardWebView()
+        recoveryController = nil
         removeDragMonitor()
+    }
+
+    static func recoveryLifecycleSelfTest() throws {
+        _ = NSApplication.shared
+        let controller = DesktopWindowController()
+        var restartCount = 0
+        var quitCount = 0
+        controller.onRestart = { restartCount += 1 }
+        controller.onQuit = { quitCount += 1 }
+
+        controller.showRecovery(title: "Wazi stopped", message: "Recovery test")
+        weak var replacedRecovery: RecoveryViewController? = controller.recoveryController
+        guard invokeButtonAction(title: "Restart Wazi", in: controller.window?.contentView),
+              restartCount == 1,
+              invokeButtonAction(title: "Quit Wazi", in: controller.window?.contentView),
+              quitCount == 1 else { throw RecoveryTestError.actionNotDelivered }
+
+        controller.showRecovery(title: "Wazi stopped", message: "Replacement test")
+        guard replacedRecovery == nil,
+              invokeButtonAction(title: "Restart Wazi", in: controller.window?.contentView),
+              restartCount == 2,
+              invokeButtonAction(title: "Quit Wazi", in: controller.window?.contentView),
+              quitCount == 2 else { throw RecoveryTestError.replacementFailed }
+
+        weak var closingRecovery: RecoveryViewController? = controller.recoveryController
+        controller.windowWillClose(Notification(name: NSWindow.willCloseNotification, object: controller.window))
+        guard closingRecovery == nil else { throw RecoveryTestError.closeDidNotRelease }
+    }
+
+    private static func invokeButtonAction(title: String, in root: NSView?) -> Bool {
+        guard let root else { return false }
+        if let button = root as? NSButton, button.title == title {
+            return NSApplication.shared.sendAction(button.action, to: button.target, from: button)
+        }
+        return root.subviews.contains { invokeButtonAction(title: title, in: $0) }
+    }
+
+    private enum RecoveryTestError: Error {
+        case actionNotDelivered
+        case replacementFailed
+        case closeDidNotRelease
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
