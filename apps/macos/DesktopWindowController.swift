@@ -122,23 +122,22 @@ final class DesktopWindowController: NSWindowController, NSWindowDelegate, WKNav
             terminationCount += 1
             controller?.showRecovery(title: "Wazi stopped", message: "Web content test")
         }
-        weak var terminatedWebView: WKWebView? = nil
-        do {
-            let ownedWebView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
-            controller.webView = ownedWebView
-            controller.pinnedOrigin = URL(string: "http://127.0.0.1:1")
-            controller.setContent(ownedWebView)
-            terminatedWebView = ownedWebView
-            controller.webViewWebContentProcessDidTerminate(ownedWebView)
-        }
-        guard terminatedWebView == nil,
-              controller.webView == nil,
-              controller.recoveryController != nil,
-              terminationCount == 1,
-              invokeButtonAction(title: "Restart Wazi", in: controller.window?.contentView),
+        let ownedWebView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+        controller.webView = ownedWebView
+        controller.pinnedOrigin = URL(string: "http://127.0.0.1:1")
+        controller.setContent(ownedWebView)
+        controller.webViewWebContentProcessDidTerminate(ownedWebView)
+        guard controller.webView == nil,
+              ownedWebView.superview == nil,
+              ownedWebView.navigationDelegate == nil,
+              ownedWebView.uiDelegate == nil,
+              controller.pinnedOrigin == nil else { throw RecoveryTestError.terminatedViewNotCleared }
+        guard terminationCount == 1,
+              controller.recoveryController != nil else { throw RecoveryTestError.terminationCallbackNotDelivered }
+        guard invokeButtonAction(title: "Restart Wazi", in: controller.window?.contentView),
               restartCount == 3,
               invokeButtonAction(title: "Quit Wazi", in: controller.window?.contentView),
-              quitCount == 3 else { throw RecoveryTestError.terminationRecoveryFailed }
+              quitCount == 3 else { throw RecoveryTestError.terminationRecoveryNotActionable }
 
         weak var closingRecovery: RecoveryViewController? = controller.recoveryController
         controller.windowWillClose(Notification(name: NSWindow.willCloseNotification, object: controller.window))
@@ -154,11 +153,24 @@ final class DesktopWindowController: NSWindowController, NSWindowDelegate, WKNav
         return root.subviews.contains { invokeButtonAction(title: title, in: $0) }
     }
 
-    private enum RecoveryTestError: Error {
+    private enum RecoveryTestError: Error, CustomStringConvertible {
         case actionNotDelivered
         case replacementFailed
-        case terminationRecoveryFailed
+        case terminatedViewNotCleared
+        case terminationCallbackNotDelivered
+        case terminationRecoveryNotActionable
         case closeDidNotRelease
+
+        var description: String {
+            switch self {
+            case .actionNotDelivered: return "initial recovery buttons did not dispatch"
+            case .replacementFailed: return "replacement recovery controller was not retained or actionable"
+            case .terminatedViewNotCleared: return "terminated WebView still had an owner, superview, delegate, or pinned origin"
+            case .terminationCallbackNotDelivered: return "owned WebKit termination callback did not install recovery"
+            case .terminationRecoveryNotActionable: return "recovery after WebKit termination was not actionable"
+            case .closeDidNotRelease: return "window close retained its recovery controller"
+            }
+        }
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
