@@ -1,11 +1,16 @@
 package repairstore
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func fixture(t *testing.T) (string, string, string, Source, []byte) {
@@ -294,6 +299,158 @@ func TestConcurrentDifferentCandidatesForSameSourceOnlyOneWins(t *testing.T) {
 	if success != 1 || stale != 1 {
 		t.Fatalf("success=%d stale=%d errors=%v", success, stale, errs)
 	}
+}
+
+func TestCrossStoreApplySerializesDifferentCandidatesAcrossProcesses(t *testing.T) {
+	runCrossStoreApply(t, false)
+}
+
+func TestCrossStoreApplySerializesSameCandidateAcrossProcesses(t *testing.T) {
+	runCrossStoreApply(t, true)
+}
+
+func runCrossStoreApply(t *testing.T, sameCandidate bool) {
+	t.Helper()
+	base, _, _, source, candidateA := fixture(t)
+	store1 := filepath.Join(base, "data-one")
+	store2 := filepath.Join(base, "data-two")
+	candidateB := candidateA
+	if !sameCandidate {
+		candidateB = []byte("# competing repair\n")
+	}
+	first, err := Save(store1, source, candidateA, "test-profile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := Save(store2, source, candidateB, "test-profile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sameCandidate && first.ID != second.ID {
+		t.Fatal("same candidates produced different identities")
+	}
+	if !sameCandidate && first.ID == second.ID {
+		t.Fatal("different candidates produced the same identity")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	release := filepath.Join(base, "release-applies")
+	ready := []string{filepath.Join(base, "ready-one"), filepath.Join(base, "ready-two")}
+	stores, ids := []string{store1, store2}, []string{first.ID, second.ID}
+	cmds := make([]*exec.Cmd, 2)
+	var stdout, stderr [2]bytes.Buffer
+	for i := range cmds {
+		exe, err := os.Executable()
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmds[i] = exec.CommandContext(ctx, exe, "-test.v", "-test.run=^TestRepairstoreApplySubprocess$")
+		cmds[i].Env = helperEnv(stores[i], ids[i], ready[i], release)
+		cmds[i].Stdout, cmds[i].Stderr = &stdout[i], &stderr[i]
+		if err := cmds[i].Start(); err != nil {
+			t.Fatalf("start contender %d: %v", i, err)
+		}
+	}
+	started := 2
+	defer func() {
+		if _, err := os.Stat(release); err != nil {
+			_ = os.WriteFile(release, []byte("go"), 0600)
+		}
+		for i := range cmds {
+			if cmds[i].Process != nil {
+				_ = cmds[i].Process.Kill()
+				_ = cmds[i].Wait()
+			}
+		}
+	}()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		readyCount := 0
+		for _, path := range ready {
+			if _, err := os.Stat(path); err == nil {
+				readyCount++
+			}
+		}
+		if readyCount == started {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	for _, path := range ready {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("both contenders failed to open the old source before locking: %v", err)
+		}
+	}
+	if err := os.WriteFile(release, []byte("go"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	results := make([]string, 2)
+	for i, cmd := range cmds {
+		if err := cmd.Wait(); err != nil {
+			t.Fatalf("contender %d failed: %v: %s%s", i, err, stdout[i].String(), stderr[i].String())
+		}
+		text := stdout[i].String() + stderr[i].String()
+		if strings.Contains(text, "RESULT=success") {
+			results[i] = "success"
+		} else if strings.Contains(text, "RESULT=stale") {
+			results[i] = "stale"
+		} else {
+			t.Fatalf("contender %d omitted result: %s", i, text)
+		}
+	}
+	if !((results[0] == "success" && results[1] == "stale") || (results[0] == "stale" && results[1] == "success")) {
+		t.Fatalf("expected one apply and one stale rejection, got %v", results)
+	}
+}
+
+// This test is launched as a subprocess by the cross-store tests. The hook is
+// before source flock, so both processes hold descriptors to the old inode
+// before either is allowed to contend for it.
+func TestRepairstoreApplySubprocess(t *testing.T) {
+	store := os.Getenv("WAZI_REPAIRSTORE_STORE")
+	if store == "" {
+		return
+	}
+	id := os.Getenv("WAZI_REPAIRSTORE_ID")
+	ready, release := os.Getenv("WAZI_REPAIRSTORE_READY"), os.Getenv("WAZI_REPAIRSTORE_RELEASE")
+	_, err := applyWithSourceLockHook(store, id, syncDir, func() {
+		if err := os.WriteFile(ready, []byte("ready"), 0600); err != nil {
+			t.Fatalf("write ready marker: %v", err)
+		}
+		deadline := time.Now().Add(12 * time.Second)
+		for time.Now().Before(deadline) {
+			if _, err := os.Stat(release); err == nil {
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		t.Fatal("timed out waiting for release marker")
+	})
+	if errors.Is(err, ErrStale) {
+		t.Log("RESULT=stale")
+		return
+	}
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	t.Log("RESULT=success")
+}
+
+func helperEnv(store, id, ready, release string) []string {
+	var env []string
+	for _, value := range os.Environ() {
+		if strings.HasPrefix(value, "WAZI_REPAIRSTORE_STORE=") || strings.HasPrefix(value, "WAZI_REPAIRSTORE_ID=") || strings.HasPrefix(value, "WAZI_REPAIRSTORE_READY=") || strings.HasPrefix(value, "WAZI_REPAIRSTORE_RELEASE=") {
+			continue
+		}
+		env = append(env, value)
+	}
+	return append(env,
+		"WAZI_REPAIRSTORE_STORE="+store,
+		"WAZI_REPAIRSTORE_ID="+id,
+		"WAZI_REPAIRSTORE_READY="+ready,
+		"WAZI_REPAIRSTORE_RELEASE="+release,
+	)
 }
 
 func TestApplyRejectsSourceSymlinkAndSpecialMode(t *testing.T) {
