@@ -34,7 +34,7 @@ struct WaziDesktopApplication {
                 print("Wazi recovery lifecycle checks passed")
                 exit(EXIT_SUCCESS)
             } catch {
-                fputs("Wazi recovery lifecycle check failed\n", stderr)
+                fputs("Wazi recovery lifecycle check failed: \(error)\n", stderr)
                 exit(EXIT_FAILURE)
             }
         }
