@@ -3,6 +3,7 @@ package repairprofile
 import (
 	"bytes"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -91,6 +92,116 @@ func TestTransformDoesNotInterpretOwnerValueWordsAsMalformedFields(t *testing.T)
 				t.Fatalf("owner value changed: %q", got.Candidate)
 			}
 		})
+	}
+}
+
+func TestTransformCanonicalAliasesAndUUIDCollisions(t *testing.T) {
+	const uuid = "123e4567-e89b-12d3-a456-426614174000"
+	source := []byte("- [ ] T1.0 First Owner: A stage: verify acc: [one] canonical_id: " + uuid + "\n- [ ] T1.1 Second Owner: B stage: verify acc: [two] uuid: 123E4567-E89B-12D3-A456-426614174000\n")
+	got, err := Transform(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got.Candidate, source) {
+		t.Fatalf("identity source bytes changed: %q", got.Candidate)
+	}
+	var duplicates int
+	for _, diagnostic := range got.Diagnostics {
+		if diagnostic.Field == "canonical-id" && diagnostic.Blocking {
+			duplicates++
+		}
+	}
+	if duplicates != 2 {
+		t.Fatalf("expected both canonical UUID owners to be diagnosed: %#v", got.Diagnostics)
+	}
+}
+
+func TestTransformRecognizesEveryPinnedCanonicalAlias(t *testing.T) {
+	const uuid = "123e4567-e89b-12d3-a456-426614174000"
+	for _, alias := range []string{"canonical_task_id", "canonicalId", "task-id", "task_id", "taskId", "task id"} {
+		t.Run(alias, func(t *testing.T) {
+			source := []byte("- [ ] T5.0 First Owner: A stage: verify acc: [one] canonical-id: " + uuid + "\n- [ ] T5.1 Second Owner: B stage: verify acc: [two] " + alias + ": " + uuid + "\n")
+			got, err := Transform(source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var duplicateCount int
+			for _, diagnostic := range got.Diagnostics {
+				if diagnostic.Field == "canonical-id" && diagnostic.Blocking && strings.Contains(diagnostic.Message, "duplicate canonical UUID") {
+					duplicateCount++
+				}
+			}
+			if duplicateCount != 2 {
+				t.Fatalf("alias %q was not treated as a canonical UUID: %#v", alias, got.Diagnostics)
+			}
+		})
+	}
+}
+
+func TestTransformCanonicalAliasesRepeatOrConflict(t *testing.T) {
+	const uuid = "123e4567-e89b-12d3-a456-426614174000"
+	for _, tc := range []struct{ name, aliases string }{
+		{"same", "canonical-id: " + uuid + " uuid: " + uuid},
+		{"conflicting", "canonical_id: " + uuid + " task-id: T-123e4567-e89b-12d3-a456-426614174001"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			source := []byte("- [ ] T2.0 Alias Owner: A stage: implement acc: [ok] " + tc.aliases + "\n")
+			got, err := Transform(source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got.Candidate, source) {
+				t.Fatal("canonical alias bytes changed")
+			}
+			found := false
+			for _, diagnostic := range got.Diagnostics {
+				if diagnostic.Field == "canonical-id" && diagnostic.Blocking {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("expected blocking repeated/conflicting alias diagnostic: %#v", got.Diagnostics)
+			}
+		})
+	}
+}
+
+func TestTransformBareUUIDAndLegacyCanonicalValues(t *testing.T) {
+	const uuid = "123e4567-e89b-12d3-a456-426614174000"
+	source := []byte("- [ ] " + uuid + " First Owner: A stage: verify acc: [one]\n- [ ] T3.0 Second Owner: B stage: verify acc: [two] canonical-task-id: T-123E4567-E89B-12D3-A456-426614174000\n- [ ] T3.1 Legacy Owner: C stage: verify acc: [three] canonical id: legacy-id\n")
+	got, err := Transform(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var canonicalDuplicates int
+	for _, diagnostic := range got.Diagnostics {
+		if diagnostic.Field == "canonical-id" && diagnostic.Blocking {
+			canonicalDuplicates++
+		}
+	}
+	if canonicalDuplicates != 2 {
+		t.Fatalf("bare UUID/canonical UUID collision was not reported: %#v", got.Diagnostics)
+	}
+}
+
+func TestMissingMetadataDiagnosticsShowAcceptedShapes(t *testing.T) {
+	got, err := Transform([]byte("- [ ] T4.0 Missing fields\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"owner": "Owner: <owner>",
+		"stage": "stage: <authored token>",
+		"acc":   "acc: [owner-authored acceptance]",
+	}
+	for _, diagnostic := range got.Diagnostics {
+		if shape := want[diagnostic.Field]; shape != "" && (!diagnostic.Blocking || !strings.Contains(diagnostic.Message, shape)) {
+			t.Errorf("%s diagnostic lacks accepted shape %q: %#v", diagnostic.Field, shape, diagnostic)
+		}
+		delete(want, diagnostic.Field)
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing field diagnostics for %v: %#v", want, got.Diagnostics)
 	}
 }
 

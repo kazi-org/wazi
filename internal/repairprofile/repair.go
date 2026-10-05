@@ -14,14 +14,15 @@ import (
 const maxSourceBytes = 4 << 20
 
 var (
-	ErrInvalidUTF8    = errors.New("repair source is not valid UTF-8")
-	ErrNUL            = errors.New("repair source contains NUL")
-	ErrTooLarge       = errors.New("repair source exceeds 4 MiB")
-	taskPattern       = regexp.MustCompile(`^([ \t]*)([-*+])[ \t]+\[([ \t]*[xX~-]?[ \t]*)\][ \t]+(.+)$`)
-	idPattern         = regexp.MustCompile(`(?i)^(?:[A-Z][A-Z0-9]*(?:[.-][A-Z0-9]+)+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b`)
-	fieldPattern      = regexp.MustCompile(`(?i)(?:^|[ \t])([A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)*)[ \t]*:`)
-	bracketList       = regexp.MustCompile(`^[ \t]*[-*+][ \t]+\[[^]]*\]`)
-	continuationField = regexp.MustCompile(`^\s*[A-Za-z][A-Za-z0-9_-]*\s*:`)
+	ErrInvalidUTF8       = errors.New("repair source is not valid UTF-8")
+	ErrNUL               = errors.New("repair source contains NUL")
+	ErrTooLarge          = errors.New("repair source exceeds 4 MiB")
+	taskPattern          = regexp.MustCompile(`^([ \t]*)([-*+])[ \t]+\[([ \t]*[xX~-]?[ \t]*)\][ \t]+(.+)$`)
+	idPattern            = regexp.MustCompile(`(?i)^(?:[A-Z][A-Z0-9]*(?:[.-][A-Z0-9]+)+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b`)
+	canonicalUUIDPattern = regexp.MustCompile(`(?i)^(?:T-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	fieldPattern         = regexp.MustCompile(`(?i)(?:^|[ \t])((?:canonical[ \t]+id|task[ \t]+id)|[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)*)[ \t]*:`)
+	bracketList          = regexp.MustCompile(`^[ \t]*[-*+][ \t]+\[[^]]*\]`)
+	continuationField    = regexp.MustCompile(`^\s*[A-Za-z][A-Za-z0-9_-]*\s*:`)
 )
 
 // Diagnostic identifies a source location and a repair-profile finding.
@@ -166,6 +167,8 @@ func looksLikeTask(line []byte) bool {
 
 func inspectTasks(tasks []task, lines []sourceLine, diagnostics *[]Diagnostic) {
 	ids := map[string][]int{}
+	canonicalUUIDs := map[string][]int{}
+	canonicalByLine := map[int]string{}
 	knownStages := map[string]bool{"preflight": true, "author": true, "implement": true, "verify": true, "review": true, "fix": true, "rereview": true, "merge": true, "verify-landed": true}
 	for _, t := range tasks {
 		match := taskPattern.FindStringSubmatch(t.text)
@@ -178,7 +181,8 @@ func inspectTasks(tasks []task, lines []sourceLine, diagnostics *[]Diagnostic) {
 		if idMatch == "" {
 			*diagnostics = append(*diagnostics, Diagnostic{t.line, "id", "missing task ID; add an owner-authored ID", true})
 		} else {
-			ids[normalizeID(idMatch)] = append(ids[normalizeID(idMatch)], t.line)
+			localID := normalizeID(idMatch)
+			ids[localID] = append(ids[localID], t.line)
 		}
 		block := tail
 		for lineNo := t.line + 1; lineNo <= len(lines); lineNo++ {
@@ -195,13 +199,31 @@ func inspectTasks(tasks []task, lines []sourceLine, diagnostics *[]Diagnostic) {
 			block += "\n" + continuation
 		}
 		fields := parseFields(block)
+		aliases := canonicalAliasValues(fields)
+		if len(aliases) > 1 {
+			*diagnostics = append(*diagnostics, Diagnostic{t.line, "canonical-id", "repeated or conflicting canonical ID aliases; keep one owner-selected value", true})
+		} else if len(aliases) == 1 {
+			canonical := strings.TrimSpace(aliases[0])
+			if canonical == "" {
+				*diagnostics = append(*diagnostics, Diagnostic{t.line, "canonical-id", "empty canonical ID is ambiguous; supply one owner-selected value", true})
+			} else if canonicalUUIDPattern.MatchString(canonical) {
+				canonicalByLine[t.line] = canonical
+				key := canonicalUUIDKey(canonical)
+				canonicalUUIDs[key] = appendUniqueLine(canonicalUUIDs[key], t.line)
+			}
+		} else if canonicalUUIDPattern.MatchString(idMatch) {
+			// A bare UUID task ID is also its canonical UUID identity in the pinned reader.
+			canonicalByLine[t.line] = idMatch
+			key := canonicalUUIDKey(idMatch)
+			canonicalUUIDs[key] = appendUniqueLine(canonicalUUIDs[key], t.line)
+		}
 		for _, name := range []string{"owner", "stage", "acc"} {
 			values := fields[name]
 			if name == "acc" {
 				values = append(append([]string(nil), values...), fields["acceptance"]...)
 			}
 			if len(values) == 0 {
-				*diagnostics = append(*diagnostics, Diagnostic{t.line, name, "missing " + name + " metadata; supply an owner-authored value", true})
+				*diagnostics = append(*diagnostics, Diagnostic{t.line, name, missingFieldMessage(name), true})
 				continue
 			}
 			if len(values) > 1 {
@@ -232,6 +254,53 @@ func inspectTasks(tasks []task, lines []sourceLine, diagnostics *[]Diagnostic) {
 		if id != "" && len(ids[id]) > 1 {
 			*diagnostics = append(*diagnostics, Diagnostic{t.line, "id", fmt.Sprintf("duplicate task ID %q; resolve identity explicitly", id), true})
 		}
+	}
+	for _, t := range tasks {
+		canonical := canonicalByLine[t.line]
+		if canonicalUUIDPattern.MatchString(canonical) {
+			key := canonicalUUIDKey(canonical)
+			if len(canonicalUUIDs[key]) > 1 {
+				*diagnostics = append(*diagnostics, Diagnostic{t.line, "canonical-id", fmt.Sprintf("duplicate canonical UUID %q; resolve identity explicitly", canonical), true})
+			}
+		}
+	}
+}
+
+func appendUniqueLine(lines []int, line int) []int {
+	for _, existing := range lines {
+		if existing == line {
+			return lines
+		}
+	}
+	return append(lines, line)
+}
+
+func canonicalUUIDKey(value string) string {
+	value = asciiCase(value, false)
+	if strings.HasPrefix(value, "t-") {
+		value = value[2:]
+	}
+	return value
+}
+
+func canonicalAliasValues(fields map[string][]string) []string {
+	var values []string
+	for _, alias := range []string{"canonical-id", "canonical_id", "canonical-task-id", "canonical_task_id", "canonicalid", "canonical id", "task-id", "task_id", "taskid", "task id", "uuid"} {
+		values = append(values, fields[alias]...)
+	}
+	return values
+}
+
+func missingFieldMessage(name string) string {
+	switch name {
+	case "owner":
+		return "missing owner metadata; add Owner: <owner> using an owner-authored value"
+	case "stage":
+		return "missing stage metadata; add stage: <authored token>"
+	case "acc":
+		return "missing acc metadata; add acc: [owner-authored acceptance]"
+	default:
+		return "missing required metadata; supply an owner-authored value"
 	}
 }
 
@@ -276,8 +345,8 @@ func parseFields(text string) map[string][]string {
 		}
 	}
 	for n, m := range idx {
-		name := strings.ToLower(text[m[2]:m[3]])
-		if name != "owner" && name != "stage" && name != "acc" && name != "acceptance" {
+		name := normalizeFieldName(text[m[2]:m[3]])
+		if name != "owner" && name != "stage" && name != "acc" && name != "acceptance" && !isCanonicalAlias(name) {
 			continue
 		}
 		valueStart := m[1]
@@ -289,6 +358,19 @@ func parseFields(text string) map[string][]string {
 		fields[name] = append(fields[name], value)
 	}
 	return fields
+}
+
+func normalizeFieldName(name string) string {
+	return strings.Join(strings.Fields(strings.ToLower(name)), " ")
+}
+
+func isCanonicalAlias(name string) bool {
+	switch name {
+	case "canonical-id", "canonical_id", "canonical-task-id", "canonical_task_id", "canonicalid", "canonical id", "task-id", "task_id", "taskid", "task id", "uuid":
+		return true
+	default:
+		return false
+	}
 }
 
 func bracketDepthAt(s string, end int) int {
