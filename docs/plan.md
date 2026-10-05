@@ -150,7 +150,7 @@ Independent delta review passed exact `3d62e48`; final documentation receipt wil
 
 ## Desktop application direction — 2026-10-04
 
-User selected Swift/AppKit + WKWebView for Mac, Wails for Windows/Linux; phase1 is Mac-only. [ADR0003](adr/0003-platform-desktop-shells.md) records the decision. Existing tasks/status/history are preserved. New source work is planned, not dispatched or implemented; this planning artifact has its own independent review/merge/landed delivery. Full E3 Serenity integration remains open and does not block wrapping the truthful current observatory.
+User selected Swift/AppKit + WKWebView for Mac, Wails for Windows/Linux; phase1 is Mac-only. [ADR0003](adr/0003-platform-desktop-shells.md) records the decision. Existing tasks/status/history are preserved. The Mac wrapper is implemented and locally qualified; E8 tracks its independent review, merge and landed verification. Full E3 Serenity integration remains open and does not block wrapping the truthful current observatory.
 
-### E8 -- Phase 1 native frameless Mac desktop -> docs/plans/E8-native-mac-desktop.md (0/15)
+### E8 -- Phase 1 native frameless Mac desktop -> docs/plans/E8-native-mac-desktop.md (25/27)
 ### E9 -- Later Wails Windows/Linux delivery -> docs/plans/E9-wails-windows-linux.md (0/1)
