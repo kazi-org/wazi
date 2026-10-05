@@ -87,6 +87,10 @@ func ReadSource(path string) (Source, error) {
 }
 
 func Save(dir string, source Source, candidate []byte, profile string) (Manifest, error) {
+	return saveWithSync(dir, source, candidate, profile, syncDir)
+}
+
+func saveWithSync(dir string, source Source, candidate []byte, profile string, syncDirectory func(string) error) (Manifest, error) {
 	p, err := canonicalNoSymlinks(source.Path)
 	if err != nil || p != source.Path {
 		return Manifest{}, fmt.Errorf("%w: source path must be canonical", ErrInvalidSource)
@@ -100,7 +104,7 @@ func Save(dir string, source Source, candidate []byte, profile string) (Manifest
 	if err := validateSourceSnapshot(source); err != nil {
 		return Manifest{}, err
 	}
-	root, err := prepareStore(dir, source.Path)
+	root, err := prepareStoreWithSync(dir, source.Path, syncDirectory)
 	if err != nil {
 		return Manifest{}, err
 	}
@@ -108,7 +112,7 @@ func Save(dir string, source Source, candidate []byte, profile string) (Manifest
 	id := digest([]byte(source.Path + "\x00" + sd + "\x00" + cd + "\x00" + profile))
 	m := Manifest{ID: id, SourcePath: source.Path, SourceDigest: sd, CandidateDigest: cd, Profile: profile}
 	entry := filepath.Join(root, id)
-	if err := os.Mkdir(entry, 0700); err != nil {
+	if err := makePrivateDir(root, entry, syncDirectory); err != nil {
 		if !errors.Is(err, os.ErrExist) {
 			return Manifest{}, fmt.Errorf("create candidate directory: %w", err)
 		}
@@ -145,6 +149,10 @@ func Save(dir string, source Source, candidate []byte, profile string) (Manifest
 }
 
 func Apply(dir, id string) (string, error) {
+	return applyWithSync(dir, id, syncDir)
+}
+
+func applyWithSync(dir, id string, syncDirectory func(string) error) (string, error) {
 	if !validID(id) {
 		return "", fmt.Errorf("%w: invalid candidate id", ErrInvalidStore)
 	}
@@ -242,10 +250,13 @@ func Apply(dir, id string) (string, error) {
 	if err := writeExactOrVerify(backup, original, 0600); err != nil {
 		return "", err
 	}
-	if err := syncDir(entry); err != nil {
+	if err := syncDirectory(entry); err != nil {
 		return "", err
 	}
-	if err := replaceAtomically(p, candidate, initial.Mode().Perm(), identity(initial), m.SourceDigest); err != nil {
+	if err := replaceAtomically(p, candidate, initial.Mode().Perm(), identity(initial), m.SourceDigest, syncDirectory); err != nil {
+		if errors.Is(err, ErrApplyUncertain) {
+			return backup, err
+		}
 		return "", err
 	}
 	return backup, nil
@@ -272,6 +283,10 @@ func validateSourceSnapshot(s Source) error {
 }
 
 func prepareStore(dir, source string) (string, error) {
+	return prepareStoreWithSync(dir, source, syncDir)
+}
+
+func prepareStoreWithSync(dir, source string, syncDirectory func(string) error) (string, error) {
 	if dir == "" {
 		return "", fmt.Errorf("%w: empty store path", ErrInvalidStore)
 	}
@@ -286,7 +301,7 @@ func prepareStore(dir, source string) (string, error) {
 			return "", fmt.Errorf("%w: store must be outside source repository", ErrInvalidStore)
 		}
 	}
-	root, err = canonicalPathCreate(root)
+	root, err = canonicalPathCreateWithSync(root, syncDirectory)
 	if err != nil {
 		return "", err
 	}
@@ -399,7 +414,7 @@ func syncDir(p string) error {
 	defer f.Close()
 	return f.Sync()
 }
-func replaceAtomically(path string, b []byte, mode os.FileMode, expected fileIdentity, expectedDigest string) error {
+func replaceAtomically(path string, b []byte, mode os.FileMode, expected fileIdentity, expectedDigest string, syncParent func(string) error) error {
 	dir := filepath.Dir(path)
 	f, err := os.CreateTemp(dir, ".wazi-repair-*")
 	if err != nil {
@@ -444,8 +459,8 @@ func replaceAtomically(path string, b []byte, mode os.FileMode, expected fileIde
 	if e = os.Rename(tmp, path); e != nil {
 		return fmt.Errorf("replace repair source: %w", e)
 	}
-	if e = syncDir(dir); e != nil {
-		return fmt.Errorf("%w: %v", ErrApplyUncertain, e)
+	if e = syncParent(dir); e != nil {
+		return fmt.Errorf("%w: %w", ErrApplyUncertain, e)
 	}
 	return nil
 }
@@ -478,6 +493,13 @@ func canonicalNoSymlinks(p string) (string, error) {
 	return a, nil
 }
 func canonicalPathCreate(p string) (string, error) {
+	return canonicalPathCreateWithSync(p, syncDir)
+}
+
+// canonicalPathCreateWithSync creates missing path components one at a time
+// and makes each directory entry durable before proceeding to its child.
+// The sync function is passed explicitly so failures can be exercised in tests.
+func canonicalPathCreateWithSync(p string, syncParent func(string) error) (string, error) {
 	a, err := filepath.Abs(p)
 	if err != nil {
 		return "", err
@@ -492,7 +514,7 @@ func canonicalPathCreate(p string) (string, error) {
 		cur = filepath.Join(cur, part)
 		st, e := os.Lstat(cur)
 		if errors.Is(e, os.ErrNotExist) {
-			if e = os.Mkdir(cur, 0700); e != nil && !errors.Is(e, os.ErrExist) {
+			if e = makePrivateDir(filepath.Dir(cur), cur, syncParent); e != nil && !errors.Is(e, os.ErrExist) {
 				return "", e
 			}
 			st, e = os.Lstat(cur)
@@ -505,6 +527,18 @@ func canonicalPathCreate(p string) (string, error) {
 		}
 	}
 	return a, nil
+}
+
+// makePrivateDir syncs the parent immediately after creating a private
+// directory. A failure is returned before any child entry can be written.
+func makePrivateDir(parent, path string, syncParent func(string) error) error {
+	if err := os.Mkdir(path, 0700); err != nil {
+		return err
+	}
+	if err := syncParent(parent); err != nil {
+		return fmt.Errorf("sync parent of private directory: %w", err)
+	}
+	return nil
 }
 func openNoFollow(p string) (*os.File, error) {
 	fd, e := syscall.Open(p, syscall.O_RDONLY|syscall.O_NOFOLLOW, 0)
