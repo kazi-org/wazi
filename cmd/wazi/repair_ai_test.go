@@ -1,0 +1,102 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/kazi-org/wazi/internal/deep"
+	"github.com/kazi-org/wazi/internal/repairai"
+)
+
+func TestAIRepairProposalCacheAndSeparateApply(t *testing.T) {
+	t.Setenv("EXPLABS_API_KEY", "test-private-key")
+	t.Setenv("EXPLABS_BASE_URL", "https://api.experientiallabs.ai/v1")
+	t.Setenv("EXPLABS_MODEL", "test-model")
+	old, oldExclude := proposeRepairAI, excludeRepairCache
+	defer func() { proposeRepairAI = old; excludeRepairCache = oldExclude }()
+	excludeRepairCache = func(context.Context, string) (deep.BackupStatus, error) { return deep.BackupStatus{}, nil }
+	calls := 0
+	source := []byte("# Sample\n-[X] T1.0 Meaning Owner: owner kind: agent stage: implement acc: [observable]\n")
+	candidate := []byte("# Sample\n- [x] T1.0 Meaning Owner: owner kind: agent stage: implement acc: [observable]\n")
+	proposeRepairAI = func(ctx context.Context, cfg repairai.Config, b []byte) ([]byte, error) {
+		calls++
+		if !bytes.Equal(b, source) {
+			t.Fatal("wrong selected input")
+		}
+		return candidate, nil
+	}
+	file := filepath.Join(t.TempDir(), "plan.md")
+	if e := os.WriteFile(file, source, 0600); e != nil {
+		t.Fatal(e)
+	}
+	data := filepath.Join(t.TempDir(), "repair")
+	var savedID string
+	for i := 0; i < 2; i++ {
+		var out, errs bytes.Buffer
+		if c := runRepair([]string{"--ai", "--save-candidate", "--data", data, file}, &out, &errs); c != 0 {
+			t.Fatalf("%d: %s", c, errs.String())
+		}
+		if strings.Contains(out.String()+errs.String(), "test-private-key") {
+			t.Fatal("secret leaked")
+		}
+		if !strings.Contains(out.String(), "account-dependent content retention") {
+			t.Fatal("missing disclosure")
+		}
+		got, e := os.ReadFile(file)
+		if e != nil || !bytes.Equal(got, source) {
+			t.Fatal("AI automatically wrote source")
+		}
+		for _, line := range strings.Split(out.String(), "\n") {
+			if strings.HasPrefix(line, "Apply explicitly with:") {
+				savedID = line[strings.LastIndex(line, " ")+1:]
+			}
+		}
+	}
+	if calls != 1 || savedID == "" {
+		t.Fatalf("calls=%d, candidate=%q", calls, savedID)
+	}
+	var out, errs bytes.Buffer
+	if c := runRepair([]string{"--data", data, "--apply-candidate", savedID}, &out, &errs); c != 0 {
+		t.Fatal(c, errs.String())
+	}
+	got, e := os.ReadFile(file)
+	if e != nil || !bytes.Equal(got, candidate) {
+		t.Fatal("explicit apply mismatch")
+	}
+	if calls != 1 {
+		t.Fatal("apply called AI")
+	}
+}
+
+func TestAIUnknownNeverImplicitlyResends(t *testing.T) {
+	t.Setenv("EXPLABS_API_KEY", "test-private-key")
+	t.Setenv("EXPLABS_BASE_URL", "https://api.experientiallabs.ai/v1")
+	t.Setenv("EXPLABS_MODEL", "test-model")
+	old, oldExclude := proposeRepairAI, excludeRepairCache
+	defer func() { proposeRepairAI = old; excludeRepairCache = oldExclude }()
+	excludeRepairCache = func(context.Context, string) (deep.BackupStatus, error) { return deep.BackupStatus{}, nil }
+	calls := 0
+	proposeRepairAI = func(context.Context, repairai.Config, []byte) ([]byte, error) {
+		calls++
+		return nil, errors.Join(repairai.ErrUncertain, errors.New("transport uncertain"))
+	}
+	file := filepath.Join(t.TempDir(), "plan.md")
+	if e := os.WriteFile(file, []byte("# Sample\n- [ ] T1.0 Meaning Owner: owner stage: implement acc: [observable]\n"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	data := filepath.Join(t.TempDir(), "repair")
+	for i := 0; i < 2; i++ {
+		var out, errs bytes.Buffer
+		if c := runRepair([]string{"--ai", "--data", data, file}, &out, &errs); c == 0 {
+			t.Fatal("unknown succeeded")
+		}
+	}
+	if calls != 1 {
+		t.Fatal("uncertain invocation automatically resent", calls)
+	}
+}

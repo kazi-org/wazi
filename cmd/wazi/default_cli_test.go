@@ -18,7 +18,7 @@ func TestDefaultCLIHelpWithoutArguments(t *testing.T) {
 	}{
 		{
 			name: "default help",
-			want: []string{"wazi repair [--save-candidate] [--data DIR] FILE.md", "--save-candidate", "--apply-candidate", "wazi [host flags]", "--assets DIR", "developer host", "No browser, desktop app, or provider starts"},
+			want: []string{"wazi repair [--ai] [--env-file FILE] [--save-candidate] [--data DIR] FILE.md", "--save-candidate", "--apply-candidate", "wazi [host flags]", "--assets DIR", "developer host", "No browser, desktop app, or provider starts"},
 		},
 		{
 			name: "repair help",
