@@ -161,3 +161,33 @@ func TestRepairConfigScope(t *testing.T) {
 		t.Fatal("explicit Wazi owner configuration rejected", err)
 	}
 }
+
+func TestAIRejectsSelectedProjectConfigBeforePersistence(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(root, "plan.md")
+	config := filepath.Join(root, ".env")
+	if err := os.WriteFile(source, []byte("# Sample\n-[X] T1.0 Meaning Owner: owner stage: implement acc: [observable]\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config, []byte("EXPLABS_API_KEY=selected-secret\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	old := proposeRepairAI
+	defer func() { proposeRepairAI = old }()
+	calls := 0
+	proposeRepairAI = func(context.Context, repairai.Config, []byte) ([]byte, error) { calls++; return nil, nil }
+	data := filepath.Join(t.TempDir(), "absent")
+	var out, errs bytes.Buffer
+	if code := runRepair([]string{"--ai", "--env-file", config, "--data", data, source}, &out, &errs); code == 0 {
+		t.Fatal("selected config accepted")
+	}
+	if calls != 0 || !strings.Contains(errs.String(), "no request sent") || strings.Contains(out.String()+errs.String(), "selected-secret") {
+		t.Fatal(calls, out.String(), errs.String())
+	}
+	if _, err := os.Stat(data); !os.IsNotExist(err) {
+		t.Fatal("rejection persisted state")
+	}
+}
