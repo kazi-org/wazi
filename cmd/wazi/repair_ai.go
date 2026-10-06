@@ -25,6 +25,9 @@ func runAIRepair(source repairstore.Source, storeDir, envFile string, out, errOu
 	if err := repairai.CheckSource(source.Bytes); err != nil {
 		return repairprofile.Result{}, err
 	}
+	if _, err := repairai.Preflight(source.Bytes); err != nil {
+		return repairprofile.Result{}, fmt.Errorf("AI syntax preflight failed: %w; no request sent", err)
+	}
 	if err := checkRepairConfigScope(source.Path, envFile); err != nil {
 		return repairprofile.Result{}, err
 	}

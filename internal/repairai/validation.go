@@ -14,8 +14,9 @@ const syntaxPolicyVersion = "wazi-repair-ai-syntax-v1"
 
 var (
 	secretPattern    = regexp.MustCompile(`(?i)(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer[ \t]+[A-Za-z0-9._~+/=-]{12,}|(?:^|[^A-Za-z0-9])(?:[A-Z0-9]+[_-])*(?:API[_-]?KEY|ACCESS[_-]?TOKEN|TOKEN|SECRET|PASSWORD|AUTHORIZATION)[ \t]*[:=][ \t]*["']?(?:Bearer[ \t]+)?[A-Za-z0-9._~+/=-]{12,}|\b(?:sk-[A-Za-z0-9_-]{12,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[A-Z0-9]{16})\b)`)
-	spaceAfterBox    = regexp.MustCompile(`^([ \t]*[-*+][ \t]+\[[ xX~-]\])([A-Z][A-Z0-9]*(?:[.-][A-Z0-9]+)+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?:[ \t]+.*)?$`)
-	spaceAfterMarker = regexp.MustCompile(`^([ \t]*)([-*+])\[([ xX~-])\]([ \t]*.+)$`)
+	spaceAfterBox    = regexp.MustCompile(`^([ \t]*[-*+][ \t]+\[[^]]*\])([A-Z][A-Z0-9]*(?:[.-][A-Z0-9]+)+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?:[ \t]+.*)?$`)
+	spaceAfterMarker = regexp.MustCompile(`^([ \t]*)([-*+])\[([^]]*)\]([ \t]*.+)$`)
+	checkboxRow      = regexp.MustCompile(`^([ \t]*[-*+][ \t]+\[)([^]]*)(\])([ \t]+.+)$`)
 	joinedCheckbox   = regexp.MustCompile(`^[ \t]*[-*+]\[`)
 )
 
@@ -45,6 +46,20 @@ func Validate(source, candidate []byte) error {
 		return errors.New("proposal is not canonical under repair profile")
 	}
 	return nil
+}
+
+// Preflight returns the deterministic syntax-only candidate when the source
+// has no ambiguous checkbox syntax or blocking semantic diagnostics. It is
+// pure and safe to call before configuration, persistence, or provider work.
+func Preflight(source []byte) ([]byte, error) {
+	candidate, err := normalizeAI(source)
+	if err != nil {
+		return nil, err
+	}
+	if err := Validate(source, candidate); err != nil {
+		return nil, err
+	}
+	return append([]byte(nil), candidate...), nil
 }
 
 func containsCredentialLikeText(source []byte) bool { return secretPattern.Match(source) }
@@ -90,6 +105,20 @@ func normalizeAI(src []byte) ([]byte, error) {
 			}
 			if joinedCheckbox.MatchString(s) {
 				return nil, errors.New("ambiguous checkbox spacing")
+			}
+			if m := checkboxRow.FindStringSubmatch(s); m != nil {
+				interior := strings.TrimSpace(m[2])
+				canonical := " "
+				switch interior {
+				case "":
+				case "x", "X":
+					canonical = "x"
+				case "~", "-":
+					canonical = interior
+				default:
+					return nil, errors.New("ambiguous checkbox status")
+				}
+				s = m[1] + canonical + m[3] + m[4]
 			}
 			b = []byte(s)
 		}

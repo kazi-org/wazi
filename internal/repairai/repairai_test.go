@@ -103,6 +103,32 @@ func TestValidateOnlyPermittedSyntax(t *testing.T) {
 	}
 }
 
+func TestPreflightCanonicalizesPendingAndCancelledStatusSpacing(t *testing.T) {
+	source := []byte("- [  ~ ] T1.0\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n- [  -  ] T1.1\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n")
+	want := []byte("- [~] T1.0\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n- [-] T1.1\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n")
+	got, err := Preflight(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("Preflight candidate differs:\n got %q\nwant %q", got, want)
+	}
+	if err := Validate(source, got); err != nil {
+		t.Fatalf("preflight output did not validate: %v", err)
+	}
+}
+
+func TestPreflightRejectsAmbiguousCheckboxAndMissingMeaning(t *testing.T) {
+	for _, source := range [][]byte{
+		[]byte("- [??] T1.0\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n"),
+		[]byte("- [ ] T1.0\n  Stage: verify\n  Acceptance: [ok]\n"),
+	} {
+		if _, err := Preflight(source); err == nil {
+			t.Errorf("accepted inadmissible source %q", source)
+		}
+	}
+}
+
 func TestValidateRepairsJoinedSpacingAndPreservesProtectedRegions(t *testing.T) {
 	source := []byte("-[ ]T1.0\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n- [ ] T1.1\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n<!--\n- [x] T9.0\n-->\n```md\n- [x] T9.1\n```\n")
 	want := []byte("- [ ] T1.0\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n- [ ] T1.1\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n<!--\n- [x] T9.0\n-->\n```md\n- [x] T9.1\n```\n")
@@ -165,6 +191,14 @@ func TestProposeRefusesCredentialsAndInvalidResponses(t *testing.T) {
 	for _, input := range []string{"API_KEY=abcdefghijklmnop", "EXPLABS_API_KEY=longsentinelvalue", "Authorization: Bearer longbearertokensentinel", "sk-abcdefghijklmnop"} {
 		if _, err := propose(context.Background(), cfg, []byte(input), client); err == nil || called {
 			t.Fatalf("credential-like selected text was sent: %q", input)
+		}
+	}
+	for _, input := range []string{
+		"- [??] T1.0\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n",
+		"- [ ] T1.0\n  Stage: verify\n  Acceptance: [ok]\n",
+	} {
+		if _, err := propose(context.Background(), cfg, []byte(input), client); err == nil || called {
+			t.Fatal("ineligible source reached fake provider")
 		}
 	}
 	for _, body := range []string{
