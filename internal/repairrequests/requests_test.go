@@ -319,3 +319,29 @@ func TestRunRejectsCacheFileOwnedByAnotherUser(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestRunCompletionReceiptFailureRemovesResponseAndNeverResends(t *testing.T) {
+	dir, key := filepath.Join(testDir(t), "cache"), testKey('h')
+	var calls atomic.Int32
+	_, err := Run(context.Background(), dir, key, func(context.Context) ([]byte, error) {
+		calls.Add(1)
+		tmp := filepath.Join(dir, ".receipt-"+key+"-tmp")
+		if err := os.Mkdir(tmp, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(tmp, "occupy"), []byte("occupied"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		return []byte("response that must not remain cached"), nil
+	})
+	if !errors.Is(err, ErrUnknown) {
+		t.Fatalf("completion failure: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, key+".body")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("response body remains: %v", err)
+	}
+	_, err = Run(context.Background(), dir, key, func(context.Context) ([]byte, error) { calls.Add(1); return []byte("must not resend"), nil })
+	if !errors.Is(err, ErrUnknown) || calls.Load() != 1 {
+		t.Fatalf("retry err=%v calls=%d", err, calls.Load())
+	}
+}
