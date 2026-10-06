@@ -248,3 +248,9 @@ Owner reports CMD+K cannot find the installed app and bare CLI reports missing f
 E12 CLI verification passed at `fa1b172380d66fbc5da02a184dce89530b59ae8b`: changed-package race tests (including existing desktop/repair subprocess tests), vet, build, unrelated-cwd no-argument and repair-help checks. Shared load initially held the gate; verification began below the limit with the lease and SSD caches. Independent review identified stale pre-verification status in the plan; that record was corrected without changing tested source.
 
 E12 CLI delivery: PR #11 rebase-merged to `503969029b93df0ea5d087f3a270c87eded6be51`, equal tree to independently reviewed `fa05e5b`. All three hosted checks passed. The clean exact-landed binary replaced only the verified owned local PATH symlink atomically and passed no-argument/repair-help checks from `/`. The installed app/logo is preserved. Search qualification remains open pending actual launcher identification; no global indexing or registration reset was performed.
+
+## E13 AI repair and search delivery — 2026-10-06
+
+Baseline c8afe78 was clean. Separate SSD Luna lanes implemented provider and receipts while coordinator integrated CLI and documented authoritative provider sources. No live AI requests, credentials sent to workers or provider changes. The owner-provided dotenv permissions were tightened to 0600 for safe operation-scoped loading. Mac bundle/importer/registration are valid; per-app refresh/import did not yield search metadata. Owner administrator mdutil status confirms read-only Data index, with enable-index action pending explicit whole-volume scope approval.
+
+Initial PR13 hosted regression37475260995 failed adapter expectation/combined-spacing cases and an absolute temporary-directory test helper; frontend and native checks passed. These actual test failures block delivery until corrected and verified. New source validation was also tightened to preserve HTML comment closing lines.

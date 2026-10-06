@@ -96,3 +96,11 @@ The owner requested the top-level `wazi repair` command. E11 plans a separate, e
 ## Explicit deterministic plan repair
 
 E11 adds a top-level CLI operation before legacy host flag parsing. Its frozen ordinary Markdown profile is separate from portable JSON and completion evidence. Preview performs no writes; explicitly saved source-bound candidates live outside the selected repository, and apply uses a private exact backup plus guarded atomic replacement. Missing semantics remain owner-authored diagnostics. The browser and Mac app remain read-only. Optional EXPLABS and interactive proposal modes are explicitly unavailable in this first local delivery; no dotenv is loaded. See [profile](repair-profile.md) and [usage](repair.md).
+
+## Explicit AI repair extension
+
+`wazi repair --ai` is a distinct EXPLABS proposal operation, using only one selected plan and fixed syntax instructions. It does not share E3 analysis caches or invoke a provider from host startup, deterministic preview or apply. All proposals pass a byte-preserving checkbox policy and existing semantic diagnostics; missing meaning is never invented. The candidate store remains the single explicit source-write transaction with digest CAS and exact backup.
+
+Requests use the documented HTTPS endpoint, bounded nonstreaming output and one generation attempt without fallback. Operation/policy/prompt, complete source/path, model/endpoint, credential-scope fingerprint and generation settings qualify private reuse. A durable non-content receipt precedes dispatch; uncertainty and definitive failure both refuse implicit resend. Completed-body eligibility is 24 hours with sixteen worst-case 4-MiB capacity reservations. This eligibility is separate from owner-explicit generic candidate/backup retention. Only the request cache gets best-effort Time Machine exclusion; other backups or sync are not qualified. Provider retention depends on account settings and is disclosed without changing those settings.
+
+Mac discovery uses existing correct bundle metadata and scoped registration/import. A read-only Spotlight volume is an external system gate, not evidence that changing the logo or app signature would repair search.
