@@ -195,3 +195,25 @@ func TestAIRejectsSelectedProjectConfigBeforePersistence(t *testing.T) {
 		t.Fatal("rejection persisted state")
 	}
 }
+
+func TestAIAmbiguousCheckboxRefusesBeforeConfigAndPersistence(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "plan.md")
+	if err := os.WriteFile(source, []byte("# Sample\n- [??] T1.0 Meaning Owner: owner stage: implement acc: [observable]\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	old := proposeRepairAI
+	defer func() { proposeRepairAI = old }()
+	calls := 0
+	proposeRepairAI = func(context.Context, repairai.Config, []byte) ([]byte, error) { calls++; return nil, nil }
+	data := filepath.Join(t.TempDir(), "absent")
+	var out, errs bytes.Buffer
+	if code := runRepair([]string{"--ai", "--env-file", "/nonexistent-owner-config", "--data", data, source}, &out, &errs); code == 0 {
+		t.Fatal("ambiguous syntax accepted")
+	}
+	if calls != 0 || !strings.Contains(errs.String(), "syntax preflight") || !strings.Contains(errs.String(), "no request sent") {
+		t.Fatal(calls, out.String(), errs.String())
+	}
+	if _, err := os.Stat(data); !os.IsNotExist(err) {
+		t.Fatal("rejection persisted state")
+	}
+}

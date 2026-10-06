@@ -48,6 +48,9 @@ func Propose(ctx context.Context, cfg Config, source []byte) ([]byte, error) {
 }
 
 func propose(ctx context.Context, cfg Config, source []byte, client *http.Client) ([]byte, error) {
+	if _, err := Preflight(source); err != nil {
+		return nil, errors.New("repair source failed AI preflight")
+	}
 	if cfg.APIKey == "" || len(cfg.APIKey) > 4096 || strings.TrimSpace(cfg.APIKey) != cfg.APIKey || hasControl(cfg.APIKey) || !validModel(cfg.Model, cfg.APIKey) || validateBaseURL(cfg.BaseURL) != nil {
 		return nil, errors.New("repair provider configuration is invalid")
 	}
