@@ -122,3 +122,42 @@ func TestAIMissingAuthoredMeaningRefusesBeforeRequest(t *testing.T) {
 		t.Fatal("semantic rejection persisted state")
 	}
 }
+
+func TestRepairConfigScope(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "plans"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(root, "plans", "plan.md")
+	config := filepath.Join(root, ".env")
+	for _, p := range []string{source, config} {
+		if err := os.WriteFile(p, []byte("sample"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	alias := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(root, alias); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{config, filepath.Join(alias, ".env")} {
+		if err := checkRepairConfigScope(source, p); err == nil {
+			t.Fatal("selected project config accepted", p)
+		}
+	}
+	outside := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(outside, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkRepairConfigScope(source, outside); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module github.com/kazi-org/wazi\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkRepairConfigScope(source, config); err != nil {
+		t.Fatal("explicit Wazi owner configuration rejected", err)
+	}
+}
