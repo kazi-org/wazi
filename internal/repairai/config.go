@@ -43,7 +43,7 @@ func LoadConfig(envFile string) (Config, error) {
 			if err != nil {
 				return Config{}, errors.New("could not determine configuration directory")
 			}
-			if b, e := os.ReadFile(filepath.Join(wd, "go.mod")); e == nil && strings.Contains(string(b), "module github.com/kazi-org/wazi\n") {
+			if isWaziModule(filepath.Join(wd, "go.mod")) {
 				envFile = filepath.Join(wd, ".env")
 				defaultEnv = true
 			}
@@ -76,6 +76,19 @@ func LoadConfig(envFile string) (Config, error) {
 		return Config{}, errors.New("EXPLABS_BASE_URL must use the approved Experiential endpoint")
 	}
 	return cfg, nil
+}
+
+func isWaziModule(path string) bool {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if strings.TrimSpace(line) == "module github.com/kazi-org/wazi" {
+			return true
+		}
+	}
+	return false
 }
 
 func hasControl(s string) bool {

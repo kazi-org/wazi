@@ -35,6 +35,42 @@ func TestLoadConfigProcessEnvironmentWins(t *testing.T) {
 	}
 }
 
+func TestLoadConfigDoesNotTrustWaziModuleCommentSubstring(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("// module github.com/kazi-org/wazi\nmodule example.invalid/foreign\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	secret := "do-not-print-foreign-secret"
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("EXPLABS_API_KEY="+secret+"\nEXPLABS_MODEL=model\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(wd); err != nil {
+			t.Errorf("restore cwd: %v", err)
+		}
+	})
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range relevantEnv {
+		t.Setenv(key, "")
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg, err := LoadConfig("")
+	if err == nil {
+		t.Fatal("foreign go.mod comment caused default dotenv loading")
+	}
+	if cfg.APIKey != "" || strings.Contains(err.Error(), secret) {
+		t.Fatal("foreign secret escaped through config error")
+	}
+}
+
 func TestLoadConfigRejectsUnsafeEnvFileAndEndpoint(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".env")
