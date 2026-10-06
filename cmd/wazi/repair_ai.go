@@ -120,7 +120,11 @@ func checkRepairConfigScope(source, envFile string) error {
 	}
 	// The explicitly selected Wazi owner configuration remains authorized, including
 	// when the owner repairs Wazi's own plans. Do not infer a dotenv from the source.
-	if filepath.Base(config) == ".env" {
+	wd, wdErr := os.Getwd()
+	if wdErr == nil {
+		wd, wdErr = filepath.EvalSymlinks(wd)
+	}
+	if wdErr == nil && filepath.Dir(config) == wd && filepath.Base(config) == ".env" {
 		b, e := os.ReadFile(filepath.Join(filepath.Dir(config), "go.mod"))
 		if e == nil {
 			for _, line := range strings.Split(string(b), "\n") {

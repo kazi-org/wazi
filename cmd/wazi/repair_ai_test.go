@@ -157,8 +157,12 @@ func TestRepairConfigScope(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module github.com/kazi-org/wazi\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	if err := checkRepairConfigScope(source, config); err == nil {
+		t.Fatal("selected project module declaration alone authorized config")
+	}
+	t.Chdir(root)
 	if err := checkRepairConfigScope(source, config); err != nil {
-		t.Fatal("explicit Wazi owner configuration rejected", err)
+		t.Fatal("explicit caller Wazi configuration rejected", err)
 	}
 }
 
