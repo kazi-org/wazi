@@ -100,3 +100,25 @@ func TestAIUnknownNeverImplicitlyResends(t *testing.T) {
 		t.Fatal("uncertain invocation automatically resent", calls)
 	}
 }
+
+func TestAIMissingAuthoredMeaningRefusesBeforeRequest(t *testing.T) {
+	old := proposeRepairAI
+	defer func() { proposeRepairAI = old }()
+	calls := 0
+	proposeRepairAI = func(context.Context, repairai.Config, []byte) ([]byte, error) { calls++; return nil, nil }
+	file := filepath.Join(t.TempDir(), "plan.md")
+	if e := os.WriteFile(file, []byte("# Sample\n- [ ] T1.0 Meaning\n"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	data := filepath.Join(t.TempDir(), "absent")
+	var out, errs bytes.Buffer
+	if c := runRepair([]string{"--ai", "--data", data, file}, &out, &errs); c == 0 {
+		t.Fatal("missing meaning accepted")
+	}
+	if calls != 0 || !strings.Contains(out.String(), "line 2") || !strings.Contains(errs.String(), "no request sent") {
+		t.Fatal(calls, out.String(), errs.String())
+	}
+	if _, e := os.Stat(data); !os.IsNotExist(e) {
+		t.Fatal("semantic rejection persisted state")
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kazi-org/wazi/internal/repairai"
 	"github.com/kazi-org/wazi/internal/repairprofile"
 	"github.com/kazi-org/wazi/internal/repairstore"
 )
@@ -82,6 +83,19 @@ func runRepair(args []string, out, errOut io.Writer) int {
 	profile := "wazi-markdown-syntax-20261004"
 	result, e := repairprofile.Transform(source.Bytes)
 	if *ai {
+		if scanErr := repairai.CheckSource(source.Bytes); scanErr != nil {
+			fmt.Fprintln(errOut, "AI refused:", scanErr)
+			return 1
+		}
+		for _, d := range result.Diagnostics {
+			if d.Blocking && d.Field != "checkbox" {
+				for _, diagnostic := range result.Diagnostics {
+					fmt.Fprintf(out, "line %d [%s]: %s\n", diagnostic.Line, diagnostic.Field, diagnostic.Message)
+				}
+				fmt.Fprintln(errOut, "AI cannot invent authored semantics. Edit the reported fields, then preview again; no request sent.")
+				return 1
+			}
+		}
 		result, e = runAIRepair(source, storeDir, *env, out, errOut)
 		profile = "wazi-ai-checkbox-syntax-20261006"
 	}
