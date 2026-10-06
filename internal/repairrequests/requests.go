@@ -158,7 +158,8 @@ func Run(ctx context.Context, dir string, key string, generate func(context.Cont
 	current.Size = int64(len(body))
 	current.Digest = hex.EncodeToString(digest[:])
 	if err := writeReceipt(root, p, current); err != nil {
-		return nil, fmt.Errorf("%w: persist completion receipt: %v", ErrUnknown, err)
+		markUnknownLocked(root, p, current)
+		return nil, ErrUnknown
 	}
 	return append([]byte(nil), body...), nil
 }
@@ -418,15 +419,15 @@ func markUnknown(root, path, key string) {
 }
 
 func markUnknownLocked(root, path string, r receipt) {
+	bodyPath := filepath.Join(root, r.Key+".body")
+	if err := os.Remove(bodyPath); err == nil {
+		_ = syncDirectory(root)
+	} else if errors.Is(err, os.ErrNotExist) {
+		// Nothing needs removal; keep attempting to persist the unknown state.
+	}
 	r.State = "unknown"
 	r.ExpiresAt = time.Time{}
 	r.Size = 0
 	r.Digest = ""
-	if err := writeReceipt(root, path, r); err != nil {
-		return
-	}
-	if err := os.Remove(filepath.Join(root, r.Key+".body")); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return
-	}
-	_ = syncDirectory(root)
+	_ = writeReceipt(root, path, r)
 }
