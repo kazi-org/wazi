@@ -211,6 +211,9 @@ func lockNamed(ctx context.Context, root, name string) (func(), error) {
 	path := filepath.Join(root, name)
 	fd, err := syscall.Open(path, syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0600)
 	if err != nil {
+		if st, statErr := os.Lstat(path); statErr == nil && (st.Mode()&os.ModeSymlink != 0 || !st.Mode().IsRegular() || st.Mode().Perm() != 0600 || !ownedByCurrentUser(st)) {
+			return nil, fmt.Errorf("%w: lock must be an owned private regular file", ErrUnsafe)
+		}
 		return nil, fmt.Errorf("open request cache lock: %w", err)
 	}
 	f := os.NewFile(uintptr(fd), path)
