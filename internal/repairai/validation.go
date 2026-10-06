@@ -15,7 +15,7 @@ const syntaxPolicyVersion = "wazi-repair-ai-syntax-v1"
 var (
 	secretPattern    = regexp.MustCompile(`(?i)(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer[ \t]+[A-Za-z0-9._~+/=-]{12,}|(?:^|[^A-Za-z0-9])(?:[A-Z0-9]+[_-])*(?:API[_-]?KEY|ACCESS[_-]?TOKEN|TOKEN|SECRET|PASSWORD|AUTHORIZATION)[ \t]*[:=][ \t]*["']?(?:Bearer[ \t]+)?[A-Za-z0-9._~+/=-]{12,}|\b(?:sk-[A-Za-z0-9_-]{12,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[A-Z0-9]{16})\b)`)
 	spaceAfterBox    = regexp.MustCompile(`^([ \t]*[-*+][ \t]+\[[ xX~-]\])([A-Z][A-Z0-9]*(?:[.-][A-Z0-9]+)+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(?:[ \t]+.*)?$`)
-	spaceAfterMarker = regexp.MustCompile(`^([ \t]*)([-*+])\[([ xX~-])\]([ \t]+.+)$`)
+	spaceAfterMarker = regexp.MustCompile(`^([ \t]*)([-*+])\[([ xX~-])\]([ \t]*.+)$`)
 	joinedCheckbox   = regexp.MustCompile(`^[ \t]*[-*+]\[`)
 )
 
@@ -82,7 +82,11 @@ func normalizeAI(src []byte) ([]byte, error) {
 				if status == "" {
 					status = " "
 				}
-				s = m[1] + m[2] + " " + "[" + status + "]" + m[4]
+				payload := m[4]
+				if payload[0] != ' ' && payload[0] != '\t' {
+					payload = " " + payload
+				}
+				s = m[1] + m[2] + " " + "[" + status + "]" + payload
 			}
 			if joinedCheckbox.MatchString(s) {
 				return nil, errors.New("ambiguous checkbox spacing")
