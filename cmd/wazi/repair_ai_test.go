@@ -217,3 +217,36 @@ func TestAIAmbiguousCheckboxRefusesBeforeConfigAndPersistence(t *testing.T) {
 		t.Fatal("rejection persisted state")
 	}
 }
+
+func TestAIForeignWorkingDirectoryDoesNotDiscoverCredentials(t *testing.T) {
+	for _, name := range []string{"EXPLABS_API_KEY", "EXPLABS_BASE_URL", "EXPLABS_MODEL"} {
+		t.Setenv(name, "")
+	}
+	root := t.TempDir()
+	t.Chdir(root)
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.invalid/foreign\n// module github.com/kazi-org/wazi\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".env"), []byte("EXPLABS_API_KEY=foreign-secret\nEXPLABS_BASE_URL=https://api.experientiallabs.ai/v1\nEXPLABS_MODEL=test-model\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(root, "plan.md")
+	if err := os.WriteFile(source, []byte("# Sample\n-[X] T1.0 Meaning Owner: owner stage: implement acc: [observable]\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	old := proposeRepairAI
+	defer func() { proposeRepairAI = old }()
+	calls := 0
+	proposeRepairAI = func(context.Context, repairai.Config, []byte) ([]byte, error) { calls++; return nil, nil }
+	data := filepath.Join(t.TempDir(), "absent")
+	var out, errs bytes.Buffer
+	if code := runRepair([]string{"--ai", "--data", data, source}, &out, &errs); code == 0 {
+		t.Fatal("foreign cwd discovered credentials")
+	}
+	if calls != 0 || strings.Contains(out.String()+errs.String(), "foreign-secret") {
+		t.Fatal(calls, out.String(), errs.String())
+	}
+	if _, err := os.Stat(data); !os.IsNotExist(err) {
+		t.Fatal("rejection persisted state")
+	}
+}
