@@ -64,3 +64,13 @@ Unreadable discovery directories can be skipped silently. Unresolved task depend
 The server endpoint is GET-only, checks loopback Host values, rejects cross-site fetch metadata or mismatched Origin and uses `Cache-Control: no-store`. There are no outbound data requests in the application code. The browser receives task text and source locations, so the JSON response can contain private workspace material. The local guard is not an authentication system or a reason to expose the Vite server publicly. Do not override its bind address for sharing without a separate hosting/access design.
 
 Do not commit scan responses, copied private plan bodies or generated browser screenshots. The project `ajent.social` channel remains ignored; it must contain no secrets, home paths, hostnames, private IPs or customer names. Message posting is explicit coordination, not proof the recipient has read a message.
+
+## Shipped CLI repair extension
+
+Deterministic preview: `wazi repair FILE.md`. To explicitly request an EXPLABS proposal: `wazi repair --ai --env-file /path/to/wazi/.env FILE.md`. Place flags before the selected file. From the Wazi checkout, `--env-file` may be omitted; unrelated working directories do not discover project credentials. Only EXPLABS_API_KEY, EXPLABS_BASE_URL and EXPLABS_MODEL are used, with process values taking precedence. The dotenv file must be an owned regular owner-only file.
+
+Add `--save-candidate` to retain an applicable proposal. Review the printed diff, then use the printed separate `--apply-candidate` command. AI never applies a response automatically. Credential-looking source text, semantic invention, ambiguous changes and truncated responses are refused. Source identity/digest changes prevent apply; an exact-original private backup precedes atomic replacement.
+
+AI preview persists private request state, unlike zero-write deterministic preview. Eligible exact completed inputs reuse for 24 hours. Unknown/failed requests never automatically resend, and missing/corrupt cached bodies fail closed. Capacity exhaustion refuses dispatch. Provider charges and account-dependent retention may apply; Wazi does not alter provider privacy or billing settings. Request storage is owner-only with best-effort Time Machine exclusion; other backups/sync and owner-explicit candidate/backup retention are not covered.
+
+For Mac search, the usual Spotlight shortcut is Command-Space. The installed application uses its Wazi logo. If registration/import succeed but Spotlight metadata remains absent and mdutil reports a read-only index, do not rewrite the application bundle or bypass its signature: qualify the system index and actual search separately.
