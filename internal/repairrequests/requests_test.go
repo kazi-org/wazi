@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -263,5 +264,64 @@ func TestRunDefinitiveFailureIsRetainedWithoutResend(t *testing.T) {
 	_, err = Run(context.Background(), dir, key, func(context.Context) ([]byte, error) { calls.Add(1); return []byte("retry"), nil })
 	if !errors.Is(err, ErrFailed) || calls.Load() != 1 {
 		t.Fatalf("resend: err=%v calls=%d", err, calls.Load())
+	}
+}
+
+func TestRunProviderErrorsAreContentFree(t *testing.T) {
+	dir, key := filepath.Join(testDir(t), "cache"), testKey('3')
+	secretMarker := "provider-secret-error-sentinel"
+	_, err := Run(context.Background(), dir, key, func(context.Context) ([]byte, error) { return nil, errors.New(secretMarker) })
+	if !errors.Is(err, ErrUnknown) {
+		t.Fatalf("got %v", err)
+	}
+	if strings.Contains(err.Error(), secretMarker) {
+		t.Fatalf("provider error leaked: %v", err)
+	}
+}
+
+func TestRunDoesNotBlockOpeningFIFOReceiptOrLock(t *testing.T) {
+	t.Run("receipt", func(t *testing.T) {
+		dir, key := filepath.Join(testDir(t), "cache"), testKey('2')
+		if err := os.Mkdir(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := syscall.Mkfifo(filepath.Join(dir, key+".json"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Run(context.Background(), dir, key, func(context.Context) ([]byte, error) { t.Fatal("called"); return nil, nil }); !errors.Is(err, ErrUnsafe) {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("lock", func(t *testing.T) {
+		dir, key := filepath.Join(testDir(t), "cache"), testKey('1')
+		if err := os.Mkdir(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := syscall.Mkfifo(filepath.Join(dir, ".lock"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Run(context.Background(), dir, key, func(context.Context) ([]byte, error) { t.Fatal("called"); return nil, nil }); !errors.Is(err, ErrUnsafe) {
+			t.Fatalf("got %v", err)
+		}
+	})
+}
+
+func TestRunRejectsCacheFileOwnedByAnotherUser(t *testing.T) {
+	if os.Getuid() == 65534 {
+		t.Skip("test user already matches alternate owner")
+	}
+	dir, key := filepath.Join(testDir(t), "cache"), testKey('0')
+	if err := os.Mkdir(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	lockPath := filepath.Join(dir, ".lock")
+	if err := os.WriteFile(lockPath, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(lockPath, 65534, 65534); err != nil {
+		t.Skipf("filesystem does not permit changing test-file owner: %v", err)
+	}
+	if _, err := Run(context.Background(), dir, key, func(context.Context) ([]byte, error) { t.Fatal("called"); return nil, nil }); !errors.Is(err, ErrUnsafe) {
+		t.Fatalf("got %v", err)
 	}
 }
