@@ -129,14 +129,10 @@ func Run(ctx context.Context, dir string, key string, generate func(context.Cont
 		var definitive Failure
 		if ctx.Err() == nil && errors.As(genErr, &definitive) {
 			markFailed(root, p, key)
-			return nil, fmt.Errorf("%w: %v", ErrFailed, genErr)
+			return nil, ErrFailed
 		}
 		markUnknown(root, p, key)
-		cause := genErr
-		if ctx.Err() != nil {
-			cause = ctx.Err()
-		}
-		return nil, fmt.Errorf("%w: %v", ErrUnknown, cause)
+		return nil, ErrUnknown
 	}
 	if len(body) > maxResponse {
 		markFailed(root, p, key)
@@ -186,6 +182,14 @@ func prepareRoot(dir string) (string, error) {
 			if e = os.Mkdir(cur, 0700); e != nil && !errors.Is(e, os.ErrExist) {
 				return "", fmt.Errorf("create request cache directory: %w", e)
 			}
+			if e == nil {
+				if err := syncDirectory(filepath.Dir(cur)); err != nil {
+					return "", fmt.Errorf("sync request cache parent: %w", err)
+				}
+				if err := syncDirectory(cur); err != nil {
+					return "", fmt.Errorf("sync new request cache directory: %w", err)
+				}
+			}
 			st, e = os.Lstat(cur)
 		}
 		if e != nil || st.Mode()&os.ModeSymlink != 0 || !st.IsDir() {
@@ -193,8 +197,8 @@ func prepareRoot(dir string) (string, error) {
 		}
 	}
 	st, err := os.Lstat(abs)
-	if err != nil || st.Mode().Perm() != 0700 || st.Mode()&os.ModeSymlink != 0 || !st.IsDir() {
-		return "", fmt.Errorf("%w: cache root must be a private 0700 directory", ErrUnsafe)
+	if err != nil || st.Mode().Perm() != 0700 || st.Mode()&os.ModeSymlink != 0 || !st.IsDir() || !ownedByCurrentUser(st) {
+		return "", fmt.Errorf("%w: cache root must be an owned private 0700 directory", ErrUnsafe)
 	}
 	return abs, nil
 }
@@ -205,15 +209,15 @@ func lock(ctx context.Context, root string) (func(), error) {
 
 func lockNamed(ctx context.Context, root, name string) (func(), error) {
 	path := filepath.Join(root, name)
-	fd, err := syscall.Open(path, syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW, 0600)
+	fd, err := syscall.Open(path, syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("open request cache lock: %w", err)
 	}
 	f := os.NewFile(uintptr(fd), path)
 	st, err := f.Stat()
-	if err != nil || !st.Mode().IsRegular() || st.Mode().Perm() != 0600 {
+	if err != nil || !st.Mode().IsRegular() || st.Mode().Perm() != 0600 || !ownedByCurrentUser(st) {
 		_ = f.Close()
-		return nil, fmt.Errorf("%w: lock must be a private regular file", ErrUnsafe)
+		return nil, fmt.Errorf("%w: lock must be an owned private regular file", ErrUnsafe)
 	}
 	for {
 		err = syscall.Flock(fd, syscall.LOCK_EX|syscall.LOCK_NB)
@@ -249,16 +253,21 @@ func readReceipt(path, key string) (receipt, bool, error) {
 	return r, true, nil
 }
 
+func ownedByCurrentUser(info os.FileInfo) bool {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	return ok && stat.Uid == uint32(os.Getuid())
+}
+
 func readPrivate(path string) ([]byte, error) {
-	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, err
 	}
 	f := os.NewFile(uintptr(fd), path)
 	defer f.Close()
 	st, err := f.Stat()
-	if err != nil || !st.Mode().IsRegular() || st.Mode().Perm() != 0600 {
-		return nil, fmt.Errorf("%w: %q must be a private regular file", ErrUnsafe, filepath.Base(path))
+	if err != nil || !st.Mode().IsRegular() || st.Mode().Perm() != 0600 || !ownedByCurrentUser(st) {
+		return nil, fmt.Errorf("%w: %q must be an owned private regular file", ErrUnsafe, filepath.Base(path))
 	}
 	b, err := io.ReadAll(io.LimitReader(f, maxResponse+1))
 	if err != nil {
