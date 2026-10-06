@@ -321,7 +321,7 @@ func TestRunRejectsCacheFileOwnedByAnotherUser(t *testing.T) {
 }
 
 func TestRunCompletionReceiptFailureRemovesResponseAndNeverResends(t *testing.T) {
-	dir, key := filepath.Join(testDir(t), "cache"), testKey('h')
+	dir, key := filepath.Join(testDir(t), "cache"), testKey('a')
 	var calls atomic.Int32
 	_, err := Run(context.Background(), dir, key, func(context.Context) ([]byte, error) {
 		calls.Add(1)
