@@ -65,7 +65,7 @@ The server endpoint is GET-only, checks loopback Host values, rejects cross-site
 
 Do not commit scan responses, copied private plan bodies or generated browser screenshots. The project `ajent.social` channel remains ignored; it must contain no secrets, home paths, hostnames, private IPs or customer names. Message posting is explicit coordination, not proof the recipient has read a message.
 
-## AI repair CLI operation (candidate)
+## Shipped AI repair CLI operation
 
 Deterministic preview: `wazi repair FILE.md`. To explicitly request an EXPLABS proposal: `wazi repair --ai --env-file /path/to/wazi/.env FILE.md`. Place flags before the selected file. From the Wazi checkout, `--env-file` may be omitted; unrelated working directories do not discover project credentials. Only EXPLABS_API_KEY, EXPLABS_BASE_URL and EXPLABS_MODEL are used, with process values taking precedence. The dotenv file must be an owned regular owner-only file.
 
