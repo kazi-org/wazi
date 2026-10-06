@@ -104,12 +104,12 @@ func TestValidateOnlyPermittedSyntax(t *testing.T) {
 }
 
 func TestValidateRepairsJoinedSpacingAndPreservesProtectedRegions(t *testing.T) {
-	source := []byte("-[ ]T1.0\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n- [ ] T1.1\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n<!--\n-[x] T9.0\n-->\n```md\n-[x] T9.1\n```\n")
-	want := []byte("- [ ] T1.0\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n- [ ] T1.1\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n<!--\n-[x] T9.0\n-->\n```md\n-[x] T9.1\n```\n")
+	source := []byte("-[ ]T1.0\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n- [ ] T1.1\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n<!--\n- [x] T9.0\n-->\n```md\n- [x] T9.1\n```\n")
+	want := []byte("- [ ] T1.0\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n- [ ] T1.1\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n<!--\n- [x] T9.0\n-->\n```md\n- [x] T9.1\n```\n")
 	if err := Validate(source, want); err != nil {
 		t.Fatal(err)
 	}
-	bad := bytes.Replace(want, []byte("<!--\n-[x] T9.0"), []byte("<!--\n- [x] T9.0"), 1)
+	bad := bytes.Replace(want, []byte("<!--\n- [x] T9.0"), []byte("<!--\n- [x] T9.9"), 1)
 	if err := Validate(source, bad); err == nil {
 		t.Fatal("proposal changed comment bytes")
 	}
@@ -130,7 +130,7 @@ func TestProposeUsesSingleConstrainedRequestAndSanitizes(t *testing.T) {
 		}
 		b, _ := io.ReadAll(r.Body)
 		body := string(b)
-		for _, frag := range []string{`"max_tokens":16384`, `"max_total_attempts":1`, `"max_attempts_per_route":1`, `"allow_fallbacks":false`, `"stream":false`, quote(candidate)} {
+		for _, frag := range []string{`"max_tokens":16384`, `"max_total_attempts":1`, `"max_attempts_per_route":1`, `"allow_fallbacks":false`, `"stream":false`, quote(string(source))} {
 			if !strings.Contains(body, frag) {
 				t.Errorf("request missing required request value")
 			}
@@ -140,6 +140,21 @@ func TestProposeUsesSingleConstrainedRequestAndSanitizes(t *testing.T) {
 	got, err := propose(context.Background(), cfg, source, client)
 	if err != nil || string(got) != candidate || calls != 1 {
 		t.Fatalf("proposal=%q calls=%d err=%v", got, calls, err)
+	}
+}
+
+func TestValidateRejectsProfileChangesToCommentOpeningClosingAndInlineLines(t *testing.T) {
+	tests := []struct{ name, source string }{
+		{"closing line", "- [ ] T1.0\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n- [ ] T1.1\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n- [ ] T1.2\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n<!--\n- [X] T9.0 -->\n"},
+		{"mixed inline comment", "- [X] T1.0 <!-- preserve this comment -->\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n- [ ] T1.1\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n- [ ] T1.2\n  Owner: team\n  Stage: verify\n  Acceptance: [ok]\n"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			src := []byte(tc.source)
+			if err := Validate(src, src); err == nil {
+				t.Fatal("accepted source whose pinned profile changes protected comment bytes")
+			}
+		})
 	}
 }
 

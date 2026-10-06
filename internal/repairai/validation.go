@@ -29,6 +29,9 @@ func Validate(source, candidate []byte) error {
 	if !bytes.Equal(expected, candidate) {
 		return errors.New("proposal changes content outside permitted checkbox syntax")
 	}
+	if err := validateProtectedBytes(source, candidate); err != nil {
+		return err
+	}
 	r, err := repairprofile.Transform(candidate)
 	if err != nil {
 		return errors.New("proposal failed repair profile validation")
@@ -65,43 +68,11 @@ func normalizeAI(src []byte) ([]byte, error) {
 	if err := CheckSource(src); err != nil {
 		return nil, err
 	}
-	lines := splitAI(src)
+	lines, protected := protectedAILines(src)
 	out := make([]byte, 0, len(src))
-	inFence, inComment := false, false
-	var fence byte
-	fenceN := 0
-	for _, line := range lines {
+	for i, line := range lines {
 		b := line.body
-		trim := bytes.TrimLeft(b, " \t")
-		if fence == 0 {
-			if len(trim) >= 3 && (trim[0] == '`' || trim[0] == '~') {
-				n := 0
-				for n < len(trim) && trim[n] == trim[0] {
-					n++
-				}
-				if n >= 3 {
-					fence, fenceN, inFence = trim[0], n, true
-				}
-			}
-		} else {
-			n := 0
-			for n < len(trim) && trim[n] == fence {
-				n++
-			}
-			if n >= fenceN && len(bytes.TrimSpace(trim[n:])) == 0 {
-				fence, fenceN, inFence = 0, 0, false
-			}
-		}
-		if !inFence {
-			if inComment {
-				if bytes.Contains(b, []byte("-->")) {
-					inComment = false
-				}
-			} else if at := bytes.Index(b, []byte("<!--")); at >= 0 && !bytes.Contains(b[at+4:], []byte("-->")) {
-				inComment = true
-			}
-		}
-		if !inFence && !inComment {
+		if !protected[i] {
 			s := string(b)
 			if m := spaceAfterBox.FindStringSubmatch(s); m != nil {
 				s = m[1] + " " + s[len(m[1]):]
@@ -125,6 +96,9 @@ func normalizeAI(src []byte) ([]byte, error) {
 	if err != nil {
 		return nil, errors.New("source rejected by deterministic profile")
 	}
+	if err := compareProtectedLines(out, r.Candidate, protected); err != nil {
+		return nil, errors.New("pinned repair profile would alter protected comment or fence bytes")
+	}
 	// Existing transformations are allowed by policy; malformed task-looking
 	// syntax remains rejected through blocking checkbox diagnostics below.
 	for _, d := range r.Diagnostics {
@@ -133,6 +107,91 @@ func normalizeAI(src []byte) ([]byte, error) {
 		}
 	}
 	return r.Candidate, nil
+}
+
+func protectedAILines(src []byte) ([]aiLine, []bool) {
+	lines := splitAI(src)
+	protected := make([]bool, len(lines))
+	inFence, inComment := false, false
+	var fence byte
+	fenceN := 0
+	for i, line := range lines {
+		trim := bytes.TrimLeft(line.body, " \t")
+		fenceLine := inFence
+		if !inFence {
+			if ch, n := aiOpeningFence(trim); n > 0 {
+				inFence, fence, fenceN = true, ch, n
+				fenceLine = true
+			}
+		} else if aiClosingFence(trim, fence, fenceN) {
+			inFence, fence, fenceN = false, 0, 0
+			fenceLine = true
+		}
+		protected[i] = fenceLine
+		if !fenceLine {
+			if inComment {
+				protected[i] = true
+				if bytes.Contains(line.body, []byte("-->")) {
+					inComment = false
+				}
+			} else if at := bytes.Index(line.body, []byte("<!--")); at >= 0 {
+				protected[i] = true
+				if !bytes.Contains(line.body[at+4:], []byte("-->")) {
+					inComment = true
+				}
+			}
+		}
+	}
+	return lines, protected
+}
+
+func aiOpeningFence(line []byte) (byte, int) {
+	if len(line) < 3 || line[0] != '`' && line[0] != '~' {
+		return 0, 0
+	}
+	n := 0
+	for n < len(line) && line[n] == line[0] {
+		n++
+	}
+	if n < 3 {
+		return 0, 0
+	}
+	return line[0], n
+}
+
+func aiClosingFence(line []byte, ch byte, width int) bool {
+	n := 0
+	for n < len(line) && line[n] == ch {
+		n++
+	}
+	return n >= width && len(bytes.TrimSpace(line[n:])) == 0
+}
+
+func validateProtectedBytes(source, candidate []byte) error {
+	sourceLines, protected := protectedAILines(source)
+	candidateLines := splitAI(candidate)
+	if len(sourceLines) != len(candidateLines) {
+		return errors.New("proposal changes protected line structure")
+	}
+	for i, isProtected := range protected {
+		if isProtected && (!bytes.Equal(sourceLines[i].body, candidateLines[i].body) || !bytes.Equal(sourceLines[i].ending, candidateLines[i].ending)) {
+			return errors.New("proposal changes comment or fenced code bytes")
+		}
+	}
+	return nil
+}
+
+func compareProtectedLines(before, after []byte, protected []bool) error {
+	a, b := splitAI(before), splitAI(after)
+	if len(a) != len(b) || len(a) != len(protected) {
+		return errors.New("protected line structure changed")
+	}
+	for i, isProtected := range protected {
+		if isProtected && (!bytes.Equal(a[i].body, b[i].body) || !bytes.Equal(a[i].ending, b[i].ending)) {
+			return errors.New("protected bytes changed")
+		}
+	}
+	return nil
 }
 
 type aiLine struct{ body, ending []byte }
