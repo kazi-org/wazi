@@ -17,13 +17,7 @@ import (
 
 func testDir(t *testing.T) string {
 	t.Helper()
-	base := "/Volumes/BuildOffload/worktrees"
-	dir, err := os.MkdirTemp(base, "repairrequests-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	return dir
+	return t.TempDir()
 }
 
 func testKey(n byte) string { return strings.Repeat(string([]byte{n}), 64) }
