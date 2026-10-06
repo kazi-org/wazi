@@ -221,6 +221,9 @@ func TestAIAmbiguousCheckboxRefusesBeforeConfigAndPersistence(t *testing.T) {
 func TestAIForeignWorkingDirectoryDoesNotDiscoverCredentials(t *testing.T) {
 	for _, name := range []string{"EXPLABS_API_KEY", "EXPLABS_BASE_URL", "EXPLABS_MODEL"} {
 		t.Setenv(name, "")
+		if err := os.Unsetenv(name); err != nil {
+			t.Fatal(err)
+		}
 	}
 	root := t.TempDir()
 	t.Chdir(root)
