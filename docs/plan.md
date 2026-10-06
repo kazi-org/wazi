@@ -157,8 +157,8 @@ User selected Swift/AppKit + WKWebView for Mac, Wails for Windows/Linux; phase1 
 
 ### E10 -- Owner-selected aperture identity -> docs/plans/E10-aperture-logo.md (5/5)
 
-### E11 -- Explicit plan source repair -> docs/plans/E11-plan-repair.md (25/32)
+### E11 -- Explicit plan source repair -> docs/plans/E11-plan-repair.md (29/32)
 
 ### E12 -- Local command and application discovery -> docs/plans/E12-local-command-usability.md (6/7)
 
-### E13 -- AI repair and Mac search discovery -> docs/plans/E13-ai-repair-and-mac-search.md (2/8)
+### E13 -- AI repair and Mac search discovery -> docs/plans/E13-ai-repair-and-mac-search.md (4/8)
