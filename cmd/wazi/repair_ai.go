@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/kazi-org/wazi/internal/deep"
@@ -21,6 +23,9 @@ var excludeRepairCache = deep.EnsureBackupExclusion
 
 func runAIRepair(source repairstore.Source, storeDir, envFile string, out, errOut io.Writer) (repairprofile.Result, error) {
 	if err := repairai.CheckSource(source.Bytes); err != nil {
+		return repairprofile.Result{}, err
+	}
+	if err := checkRepairConfigScope(source.Path, envFile); err != nil {
 		return repairprofile.Result{}, err
 	}
 	cfg, err := repairai.LoadConfig(envFile)
@@ -75,4 +80,55 @@ func runAIRepair(source repairstore.Source, storeDir, envFile string, out, errOu
 	}
 	result.Candidate = candidate
 	return result, nil
+}
+
+// Explicit configuration belongs to the caller, never to a selected foreign project.
+func checkRepairConfigScope(source, envFile string) error {
+	if envFile == "" {
+		return nil
+	}
+	config, err := filepath.EvalSymlinks(envFile)
+	if err != nil {
+		return fmt.Errorf("could not qualify configuration location; no request sent")
+	}
+	config, err = filepath.Abs(config)
+	if err != nil {
+		return fmt.Errorf("could not qualify configuration location; no request sent")
+	}
+	source, err = filepath.EvalSymlinks(source)
+	if err != nil {
+		return fmt.Errorf("could not qualify source location; no request sent")
+	}
+	source, err = filepath.Abs(source)
+	if err != nil {
+		return fmt.Errorf("could not qualify source location; no request sent")
+	}
+	root := filepath.Dir(source)
+	for d := root; ; d = filepath.Dir(d) {
+		if st, e := os.Lstat(filepath.Join(d, ".git")); e == nil && (st.IsDir() || st.Mode().IsRegular()) {
+			root = d
+			break
+		}
+		if filepath.Dir(d) == d {
+			break
+		}
+	}
+	rel, err := filepath.Rel(root, config)
+	inside := err == nil && (rel == "." || rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
+	if !inside {
+		return nil
+	}
+	// The explicitly selected Wazi owner configuration remains authorized, including
+	// when the owner repairs Wazi's own plans. Do not infer a dotenv from the source.
+	if filepath.Base(config) == ".env" {
+		b, e := os.ReadFile(filepath.Join(filepath.Dir(config), "go.mod"))
+		if e == nil {
+			for _, line := range strings.Split(string(b), "\n") {
+				if strings.TrimSpace(line) == "module github.com/kazi-org/wazi" {
+					return nil
+				}
+			}
+		}
+	}
+	return fmt.Errorf("configuration inside the selected project is not authorized; use owner configuration outside it; no request sent")
 }
