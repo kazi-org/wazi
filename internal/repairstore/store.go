@@ -310,6 +310,12 @@ func validateSourceSnapshot(s Source) error {
 	return nil
 }
 
+// Prepare qualifies and creates private repair storage outside the selected source
+// repository. Callers use it before persisting explicit AI request state.
+func Prepare(dir, source string) (string, error) {
+	return prepareStore(dir, source)
+}
+
 func prepareStore(dir, source string) (string, error) {
 	return prepareStoreWithSync(dir, source, syncDir)
 }

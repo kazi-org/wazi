@@ -22,11 +22,11 @@ func runRepair(args []string, out, errOut io.Writer) int {
 	data := flags.String("data", "", "owner-private candidate directory outside the selected repository")
 	save := flags.Bool("save-candidate", false, "explicitly save a private immutable candidate after preview")
 	apply := flags.String("apply-candidate", "", "apply the exact saved candidate ID with source check and backup")
-	ai := flags.Bool("ai", false, "optional AI proposals (disabled: provider contract unqualified)")
+	ai := flags.Bool("ai", false, "explicitly send the selected plan to EXPLABS for a validated syntax proposal")
 	interactive := flags.Bool("interactive", false, "owner-value proposals (unavailable; edit reported fields and preview again)")
-	env := flags.String("env-file", "", "reserved for qualified explicit AI; never loaded by deterministic repair")
+	env := flags.String("env-file", "", "Wazi dotenv file for explicit AI only; process environment takes precedence")
 	flags.Usage = func() {
-		fmt.Fprintln(errOut, "Usage: wazi repair [--save-candidate] [--data DIR] FILE.md\n       wazi repair --apply-candidate ID [--data DIR]\nPreview writes nothing. Place flags before the selected file. AI is disabled.")
+		fmt.Fprintln(errOut, "Usage: wazi repair [--save-candidate] [--data DIR] FILE.md\n       wazi repair --apply-candidate ID [--data DIR]\nDeterministic preview writes nothing. AI stores private request state. Place flags before the selected file.")
 		flags.PrintDefaults()
 	}
 	if e := flags.Parse(args); e != nil {
@@ -35,12 +35,12 @@ func runRepair(args []string, out, errOut io.Writer) int {
 		}
 		return 2
 	}
-	if *ai {
-		fmt.Fprintln(errOut, "AI repair unavailable: EXPLABS API/authentication/privacy contract is unqualified; no environment file loaded or request sent")
+	if *interactive || (!*ai && *env != "") {
+		fmt.Fprintln(errOut, "dotenv requires explicit --ai; interactive metadata proposals remain unavailable")
 		return 2
 	}
-	if *env != "" || *interactive {
-		fmt.Fprintln(errOut, "this deterministic version does not load dotenv or accept interactive metadata proposals; edit reported source fields explicitly and preview again")
+	if *ai && (*apply != "" || flags.NArg() != 1) {
+		fmt.Fprintln(errOut, "AI proposes one selected file; apply is a separate invocation")
 		return 2
 	}
 	storeDir := *data
@@ -79,12 +79,17 @@ func runRepair(args []string, out, errOut io.Writer) int {
 		fmt.Fprintln(errOut, "source refused:", e)
 		return 1
 	}
+	profile := "wazi-markdown-syntax-20261004"
 	result, e := repairprofile.Transform(source.Bytes)
+	if *ai {
+		result, e = runAIRepair(source, storeDir, *env, out, errOut)
+		profile = "wazi-ai-checkbox-syntax-20261006"
+	}
 	if e != nil {
 		fmt.Fprintln(errOut, "repair refused:", e)
 		return 1
 	}
-	fmt.Fprintln(out, "Profile: wazi-markdown-syntax-20261004 (ordinary Markdown; not portable JSON conformance)")
+	fmt.Fprintln(out, "Profile:", profile, "(ordinary Markdown; not portable JSON conformance)")
 	fmt.Fprintln(out, "Source SHA256:", repairDigest(source.Bytes))
 	fmt.Fprintln(out, "Candidate SHA256:", repairDigest(result.Candidate))
 	printRepairDiff(out, source.Bytes, result.Candidate)
@@ -102,7 +107,7 @@ func runRepair(args []string, out, errOut io.Writer) int {
 			fmt.Fprintln(out, "No syntax changes to save; no candidate written.")
 			return 0
 		}
-		m, e := repairstore.Save(storeDir, source, result.Candidate, "wazi-markdown-syntax-20261004")
+		m, e := repairstore.Save(storeDir, source, result.Candidate, profile)
 		if e != nil {
 			fmt.Fprintln(errOut, "candidate save refused:", e)
 			return 1
@@ -112,7 +117,11 @@ func runRepair(args []string, out, errOut io.Writer) int {
 		}
 		fmt.Fprintln(out, "Apply explicitly with: wazi repair --data", shellArgument(storeDir), "--apply-candidate", m.ID)
 	} else {
-		fmt.Fprintln(out, "Preview only; no files written. Use --save-candidate to retain this proposal.")
+		if *ai {
+			fmt.Fprintln(out, "AI proposal only; source unchanged. Private request state retained. Use --save-candidate to retain an applicable candidate.")
+		} else {
+			fmt.Fprintln(out, "Preview only; no files written. Use --save-candidate to retain this proposal.")
+		}
 	}
 	return 0
 }

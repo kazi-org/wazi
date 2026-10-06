@@ -191,7 +191,7 @@ func main() {
 func printUsage(out io.Writer) {
 	fmt.Fprintln(out, "Wazi local plan observatory")
 	fmt.Fprintln(out, "Usage:")
-	fmt.Fprintln(out, "  wazi repair [--save-candidate] [--data DIR] FILE.md")
+	fmt.Fprintln(out, "  wazi repair [--ai] [--env-file FILE] [--save-candidate] [--data DIR] FILE.md")
 	fmt.Fprintln(out, "  wazi repair --apply-candidate ID [--data DIR]")
 	fmt.Fprintln(out, "  wazi [host flags]                         start the developer host")
 	fmt.Fprintln(out, "  wazi [host flags] --assets DIR            use an explicit frontend directory")
