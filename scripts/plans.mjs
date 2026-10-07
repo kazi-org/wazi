@@ -126,7 +126,7 @@ export async function scanPlans({ root = path.join(os.homedir(), 'Code'), repoMa
   for (const repo of discovery.repos.sort((a, b) => a.path.localeCompare(b.path))) {
     const name = names.get(path.resolve(repo.path)) || path.basename(repo.path) || repo.path;
     const plans = [];
-    if (repo.splitCapped) warnings.push(`Split plan indexing for ${name} reached its ${MAX_SPLIT_PLANS} file limit.`);
+    if (repo.splitCapped) warnings.push(`Plan discovery for ${name} is incomplete: only the first ${MAX_SPLIT_PLANS} Markdown files in docs/plans/ were indexed; additional files were skipped. Project totals exclude skipped files.`);
     for (const file of repo.plans) {
       const relative = relativePath(repo.path, file);
       try {
