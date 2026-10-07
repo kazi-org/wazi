@@ -167,7 +167,10 @@ User selected Swift/AppKit + WKWebView for Mac, Wails for Windows/Linux; phase1 
 
 - [x] T14.0 Fix projected column headers Owner: UI worker kind: agent stage: implement acc: [headers share lane world positions and camera projection with task cards; zoom/pan/orbit/focus keep each header associated with its column; Map and narrow fallback remain usable]
 - [x] T14.1 Verify frontend and browser behavior Owner: coordinator kind: agent stage: verify deps: [T14.0] acc: [frontend tests/build pass on qualified DGX lane; browser zoom/pan/Map/reset/selection and narrow layout verified; Three.js source and task visibility scope preserved]
-- [ ] T14.2 Independently review exact head Owner: reviewer kind: agent stage: review deps: [T14.1] acc: [base/head recorded; accepted findings fixed and verified]
+- [ ] T14.2 Independently review exact head Owner: reviewer kind: agent stage: review deps: [T14.1, T14.2b] acc: [base/head recorded; accepted findings fixed and verified]
 - [ ] T14.3 Rebase merge and verify landed behavior Owner: coordinator kind: agent stage: verify-landed deps: [T14.2] acc: [guarded merge; landed tree matches reviewed head; installed Mac assets updated safely and native behavior verified; no release/deployment]
 
 Execution: shared frontend coding/builds run on a qualified isolated DGX checkout and task-local caches. Migration bundle hash and base equality were verified; source was clean, with no active Git operation to transfer. Credentials/dotenv and signing keys were excluded. Primary Mac source and dependency checkout retained unchanged. Native Mac app verification remains an exempt Apple-platform action.
+
+- [ ] T14.2a Fix accepted LH-R01 layout thrashing Owner: UI worker kind: agent stage: implement deps: [T14.1] acc: [all card/header geometry reads precede any frame style writes; font floor and association preserved]
+- [ ] T14.2b Verify LH-R01 and re-review Owner: coordinator kind: agent stage: verify deps: [T14.2a] acc: [affected tests/build and browser zoom alignment/font checks pass; exact-head independent re-review required]
