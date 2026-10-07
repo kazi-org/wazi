@@ -250,3 +250,20 @@ test('dependency status prefers own plan and does not infer ambiguous external I
   assert.equal(c.tasks[0].status, 'pending');
   assert.ok(c.warnings.some(warning => warning.includes('Ambiguous dependency T1.1')));
 });
+
+test('split discovery indexes 256 files and warns only when additional files are skipped', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'wazi-limit-'));
+  t.after(() => fs.rm(root, {recursive: true, force: true}));
+  const plans = path.join(root, 'sample', 'docs', 'plans');
+  await fs.mkdir(plans, {recursive: true});
+  for (let i = 0; i < 256; i++) {
+    await fs.writeFile(path.join(plans, String(i).padStart(3, '0') + '.md'), '# Sample');
+  }
+  const full = await scanPlans({root});
+  assert.equal(full.projects[0].plans.length, 256);
+  assert.ok(!full.warnings.some(w => w.includes('incomplete')));
+  await fs.writeFile(path.join(plans, '256.md'), '# Extra');
+  const capped = await scanPlans({root});
+  assert.equal(capped.projects[0].plans.length, 256);
+  assert.ok(capped.warnings.some(w => w.includes('first 256 Markdown files')));
+});
