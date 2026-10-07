@@ -176,3 +176,13 @@ Execution: shared frontend coding/builds run on a qualified isolated DGX checkou
 - [x] T14.2b Verify LH-R01 and re-review Owner: coordinator kind: agent stage: verify deps: [T14.2a] acc: [affected tests/build and browser zoom alignment/font checks pass; exact-head independent re-review required]
 
 E14 delivery: PR16 REBASE landed `fb7821896cb2f97cce5638df6bd595e1d548d8b6`, tree equal to independently reviewed `6cb8278`. Candidate37566332455/37566332382 and landed37566505535/37566505537 hosted checks PASS. Exact-landed arm64 development bundle installed safely with prior bundle preserved; resources/signature/source revision verified and native window visibly shows projected headers/logo. Browser camera regression PASS. Native automated wheel/focus gestures did not visibly move the camera despite window raise; native gesture acceptance remains unverified under T14.3. No release/deployment or live AI call.
+
+## E15 Project-wide plan visibility
+fidelity: executable
+
+- [ ] T15.0 Implement all-plans default and explicit plan filtering Owner: UI worker kind: agent stage: implement acc: [all discovered plans/tasks shown by default; plan filtering reversible; repeated task IDs remain plan-qualified; inspector uses original plan/task; four-per-lane cap removed; indexing warning explicitly describes incomplete discovery]
+- [ ] T15.1 Verify aggregate and filtered navigation Owner: coordinator kind: agent stage: verify deps: [T15.0] acc: [tests/build on isolated DGX pass; browser multi-plan repeated IDs, plan/epic filters, selection and full task visibility pass; read-only and provider boundaries preserved]
+- [ ] T15.2 Independent exact-head review Owner: reviewer kind: agent stage: review deps: [T15.1] acc: [base/head and verdict recorded; findings resolved]
+- [ ] T15.3 Guarded rebase merge and landed verification Owner: coordinator kind: agent stage: verify-landed deps: [T15.2] acc: [reviewed tree lands; exact-main native development artifact verified and installed with previous bundle retained; native launch checked; no release/deploy]
+
+Scope: UI aggregation and source identity, full canvas visibility and clearer discovery-limit disclosure. Scanner capacity policy remains bounded120 split files; no remote ingestion, plan writes or live AI. DGX isolated task worktree/caches; exact pinned Three source reused without dependency edits. Native Mac launch/install exempt; no Mac build/test workers.
