@@ -6,7 +6,8 @@ import { lanes, laneFor } from './demo.mjs';
 
 const statusIcons = {complete:CheckCircle, active:SpinnerGap, blocked:LockSimple, pending:Circle};
 export default function Space({ tasks, selected, onSelect, showLinks, resetKey, view, focusKey, filter }) {
-  const container = useRef(null), canvas = useRef(null), cardLayer=useRef(null), engine=useRef(null);
+  const container = useRef(null), canvas = useRef(null), cardLayer=useRef(null), headerLayer=useRef(null), engine=useRef(null);
+  const layoutRef=useRef(null);
   const lastHomeInput=useRef({resetKey,view});
   const [failed,setFailed]=useState(false);
   const [size,setSize]=useState({w:1000,h:650});
@@ -18,6 +19,7 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
   const columnSpacing=2*Math.tan(Math.PI/9)*layoutDistance*aspect/groups.length*0.92;
   const nodes = groups.flatMap((lane,col)=>lane.tasks.map((task,row)=>({task, color:lane.color, position:new THREE.Vector3((col-(groups.length-1)/2)*columnSpacing, ((lane.tasks.length-1)/2-row)*3.4, Math.sin(col*1.7+row)*0.38), col, row})));
   const nodeRef=useRef(nodes); nodeRef.current=nodes;
+  layoutRef.current={groups,nodes,columnSpacing};
   const selection=useRef(selected);selection.current=selected;
   const linksEnabled=useRef(showLinks);linksEnabled.current=showLinks;
   const filterRef=useRef(filter);filterRef.current=filter;
@@ -57,7 +59,7 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
     const resize=new ResizeObserver(()=>{const w=el.clientWidth,h=el.clientHeight; camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);setSize({w,h});});resize.observe(el);
     let frame;
     const render=()=>{
-      frame=requestAnimationFrame(render);controls.update();
+      frame=requestAnimationFrame(render);controls.update();camera.updateMatrixWorld();camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
       const w=el.clientWidth,h=el.clientHeight;
       cardLayer.current?.querySelectorAll('[data-card]').forEach((card,i)=>{
         const node=nodeRef.current[i];if(!node)return;
@@ -68,6 +70,28 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
         card.style.left=`${(projected.x*0.5+0.5)*w}px`;card.style.top=`${(-projected.y*0.5+0.5)*h}px`;
         card.style.visibility=behind||projected.z>1?'hidden':'visible';
         card.style.zIndex=String(Math.round(1000-projected.z*500));
+      });
+      const layout=layoutRef.current;
+      const labels=headerLayer.current?.querySelectorAll('[data-lane-label]')||[];
+      const cards=cardLayer.current?.querySelectorAll('[data-card]')||[];
+      labels.forEach((label,i)=>{
+        if(!layout)return;
+        const nodeIndex=layout.nodes.findIndex(node=>node.col===i&&node.row===0);
+        const node=nodeIndex>=0?layout.nodes[nodeIndex]:null;
+        const laneCount=layout.groups.length||1;
+        const anchor=node?.position||new THREE.Vector3((i-(laneCount-1)/2)*layout.columnSpacing,3.4,0);
+        const projected=anchor.clone().project(camera);
+        const behind=anchor.clone().applyMatrix4(camera.matrixWorldInverse).z>=0;
+        const scale=THREE.MathUtils.clamp(25/camera.position.distanceTo(anchor),0.4,1.4);
+        const cardHeight=node?(cards[nodeIndex]?.offsetHeight||106)*scale:0;
+        const gap=12*scale;
+        const headerHeight=label.offsetHeight*scale;
+        label.style.transformOrigin='top center';
+        label.style.transform='translateX(-50%) scale('+scale+')';
+        label.style.left=String((projected.x*0.5+0.5)*w)+'px';
+        label.style.top=String((-projected.y*0.5+0.5)*h-cardHeight/2-gap-headerHeight)+'px';
+        label.style.visibility=behind||projected.z>1?'hidden':'visible';
+        label.style.zIndex=String(Math.round(1000-projected.z*500));
       });
       graph.children.forEach(child=>{
         const connected=!selection.current||child.userData.ids?.includes(selection.current);
@@ -106,9 +130,9 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
   },[view]);
   useEffect(()=>{if(!focusKey)return;const en=engine.current,node=nodes.find(n=>n.task.id===selected);if(en&&node){const offset=en.camera.position.clone().sub(en.controls.target);en.controls.target.copy(node.position);en.camera.position.copy(node.position.clone().add(offset.multiplyScalar(0.72)));en.controls.update();}},[focusKey]);
   const connectedIds=new Set(selected?[selected,...(tasks.find(t=>t.id===selected)?.dependencies||[]),...tasks.filter(t=>t.dependencies.includes(selected)).map(t=>t.id)]:[]);
-  return <div className="space" ref={container}>
+  return <div className={`space ${failed?'no-webgl':''}`} ref={container}>
     <canvas ref={canvas} aria-label="Interactive 3D task dependency map" />
-    <div className="lane-labels" style={{gridTemplateColumns:`repeat(${groups.length}, minmax(0, 1fr))`}}>{groups.map((g,i)=><div key={g.id} style={{'--lane-color':g.color}}><span className="lane-number">0{i+1}</span><strong>{g.title}</strong><span className="lane-count">{g.tasks.length}</span><small>{g.subtitle}</small></div>)}</div>
+    <div className="lane-labels" ref={headerLayer}>{groups.map((g,i)=><div data-lane-label key={g.id} style={{'--lane-color':g.color}}><span className="lane-number">0{i+1}</span><strong>{g.title}</strong><span className="lane-count">{g.tasks.length}</span><small>{g.subtitle}</small></div>)}</div>
     <div className="card-layer" ref={cardLayer}>{nodes.map(({task,color})=>{const Icon=statusIcons[task.status]||Circle;const statusText=task.authoredStatusLabel||(task.status==='complete'&&task.authoredStatus==='checked'?'Marked done':task.status);return <button data-card key={task.id} aria-label={`${task.id}: ${task.title}, ${statusText}`} aria-pressed={selected===task.id} onClick={()=>onSelect(task.id)} className={`task-card ${task.status} ${selected===task.id?'selected':''} ${selected&&!connectedIds.has(task.id)?'muted':''} ${filter!=='all'&&task.status!==filter?'filtered':''}`} style={{'--lane-color':color}}>
       <div className="card-meta"><span>{task.id}</span><Icon size={14} weight={task.status==='complete'?'fill':'regular'}/></div>
       <strong>{task.title}</strong><div className="card-foot"><span>{task.owner||'Unassigned'}</span><span>{task.dependencies.length?`${task.dependencies.length} dependencies`:'Entry point'}</span></div>
