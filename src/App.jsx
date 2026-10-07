@@ -47,7 +47,7 @@ export default function App(){
     try {const response=await fetch('/api/plans');if(!response.ok)throw new Error('Could not read local plans');const data=await response.json();
       if(!Array.isArray(data.projects))throw new Error('Local plan reader is unavailable');
       setProjects(current=>[sampleProject,...data.projects.map(p=>({...p,plans:p.plans.map(normalizePlan)})),...current.filter(p=>p.imported)]);
-      if(data.warnings?.length)setNotice(data.warnings[0]);
+      if(data.warnings?.length)setNotice(data.warnings.join('\n'));
     }catch{setNotice('Local plans are unavailable. You can still import a Markdown plan.');}finally{setLoading(false);}
   };
   useEffect(()=>{loadPlans();},[]);

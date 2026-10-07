@@ -186,3 +186,9 @@ fidelity: executable
 - [ ] T15.3 Guarded rebase merge and landed verification Owner: coordinator kind: agent stage: verify-landed deps: [T15.2] acc: [reviewed tree lands; exact-main native development artifact verified and installed with previous bundle retained; native launch checked; no release/deploy]
 
 Scope: UI aggregation and source identity, full canvas visibility and clearer discovery-limit disclosure. Scanner capacity policy remains bounded120 split files; no remote ingestion, plan writes or live AI. DGX isolated task worktree/caches; exact pinned Three source reused without dependency edits. Native Mac launch/install exempt; no Mac build/test workers.
+
+- [ ] T15.2a Fix accepted E15-R01 warning loss Owner: coordinator kind: agent stage: implement deps: [T15.1] acc: [all scan warnings surfaced;120-file incomplete totals disclosure cannot be hidden by an earlier warning; warning text remains readable/dismissible]
+- [ ] T15.2b Verify warning preservation Owner: coordinator kind: agent stage: verify deps: [T15.2a] acc: [tests/build and browser multi-warning path pass]
+- [ ] T15.2c Independent exact-head re-review Owner: reviewer kind: agent stage: review deps: [T15.2b] acc: [E15-R01 closed; full candidate PASS before merge]
+
+Initial review4ae2c9b FAIL E15-R01/P2: only first global scan warning shown. Accepted; merge held for preservation fix, affected verification and exact-head re-review.
