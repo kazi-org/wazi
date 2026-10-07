@@ -61,21 +61,26 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
     const render=()=>{
       frame=requestAnimationFrame(render);controls.update();camera.updateMatrixWorld();camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
       const w=el.clientWidth,h=el.clientHeight;
-      cardLayer.current?.querySelectorAll('[data-card]').forEach((card,i)=>{
-        const node=nodeRef.current[i];if(!node)return;
+      const layout=layoutRef.current;
+      const nodes=[...nodeRef.current];
+      const cards=[...(cardLayer.current?.querySelectorAll('[data-card]')||[])];
+      const labels=[...(headerLayer.current?.querySelectorAll('[data-lane-label]')||[])];
+      // Read every DOM measurement before changing any projected style.
+      const cardHeights=cards.map(card=>card.offsetHeight);
+      const labelMetrics=labels.map(label=>{
+        const heading=label.querySelector('strong');
+        const headingFontSize=heading?parseFloat(window.getComputedStyle(heading).fontSize):12;
+        return {height:label.offsetHeight,headingFontSize:headingFontSize||12};
+      });
+      const cardPositions=cards.map((card,i)=>{
+        const node=nodes[i];if(!node)return null;
         const projected=node.position.clone().project(camera);
         const behind=node.position.clone().applyMatrix4(camera.matrixWorldInverse).z>=0;
         const scale=THREE.MathUtils.clamp(25/camera.position.distanceTo(node.position),0.4,1.4);
-        card.style.transform=`translate(-50%, -50%) scale(${scale})`;
-        card.style.left=`${(projected.x*0.5+0.5)*w}px`;card.style.top=`${(-projected.y*0.5+0.5)*h}px`;
-        card.style.visibility=behind||projected.z>1?'hidden':'visible';
-        card.style.zIndex=String(Math.round(1000-projected.z*500));
+        return {projected,behind,scale,zIndex:String(Math.round(1000-projected.z*500))};
       });
-      const layout=layoutRef.current;
-      const labels=headerLayer.current?.querySelectorAll('[data-lane-label]')||[];
-      const cards=cardLayer.current?.querySelectorAll('[data-card]')||[];
-      labels.forEach((label,i)=>{
-        if(!layout)return;
+      const labelPositions=labels.map((label,i)=>{
+        if(!layout)return null;
         const nodeIndex=layout.nodes.findIndex(node=>node.col===i&&node.row===0);
         const node=nodeIndex>=0?layout.nodes[nodeIndex]:null;
         const laneCount=layout.groups.length||1;
@@ -83,18 +88,35 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
         const projected=anchor.clone().project(camera);
         const behind=anchor.clone().applyMatrix4(camera.matrixWorldInverse).z>=0;
         const cardScale=THREE.MathUtils.clamp(25/camera.position.distanceTo(anchor),0.4,1.4);
-        const heading=label.querySelector('strong');
-        const headingFontSize=heading?parseFloat(window.getComputedStyle(heading).fontSize):12;
-        const labelScale=Math.max(cardScale,9/(headingFontSize||12));
-        const cardHeight=node?(cards[nodeIndex]?.offsetHeight||106)*cardScale:0;
+        const {height:labelHeight,headingFontSize}=labelMetrics[i];
+        const labelScale=Math.max(cardScale,9/headingFontSize);
+        const cardHeight=node?(cardHeights[nodeIndex]||106)*cardScale:0;
         const gap=12*cardScale;
-        const headerHeight=label.offsetHeight*labelScale;
+        const headerHeight=labelHeight*labelScale;
+        return {
+          projected,behind,labelScale,
+          left:String((projected.x*0.5+0.5)*w),
+          top:String((-projected.y*0.5+0.5)*h-cardHeight/2-gap-headerHeight),
+          zIndex:String(Math.round(1000-projected.z*500))
+        };
+      });
+      // Apply card writes only after all card and label geometry has been read.
+      cards.forEach((card,i)=>{
+        const placement=cardPositions[i];if(!placement)return;
+        card.style.transform='translate(-50%, -50%) scale('+placement.scale+')';
+        card.style.left=((placement.projected.x*0.5+0.5)*w)+'px';
+        card.style.top=((-placement.projected.y*0.5+0.5)*h)+'px';
+        card.style.visibility=placement.behind||placement.projected.z>1?'hidden':'visible';
+        card.style.zIndex=placement.zIndex;
+      });
+      labels.forEach((label,i)=>{
+        const placement=labelPositions[i];if(!placement)return;
         label.style.transformOrigin='top center';
-        label.style.transform='translateX(-50%) scale('+labelScale+')';
-        label.style.left=String((projected.x*0.5+0.5)*w)+'px';
-        label.style.top=String((-projected.y*0.5+0.5)*h-cardHeight/2-gap-headerHeight)+'px';
-        label.style.visibility=behind||projected.z>1?'hidden':'visible';
-        label.style.zIndex=String(Math.round(1000-projected.z*500));
+        label.style.transform='translateX(-50%) scale('+placement.labelScale+')';
+        label.style.left=placement.left+'px';
+        label.style.top=placement.top+'px';
+        label.style.visibility=placement.behind||placement.projected.z>1?'hidden':'visible';
+        label.style.zIndex=placement.zIndex;
       });
       graph.children.forEach(child=>{
         const connected=!selection.current||child.userData.ids?.includes(selection.current);
