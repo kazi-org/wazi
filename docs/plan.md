@@ -199,3 +199,11 @@ E15 delivered: independent full-head reviewc7c8836 PASS vs784dc3c with E15-R01 c
 ## Status grouping
 
 - [ ] Status grouping: render source statuses as columns, retain delivery stages and task metadata; verify mixed stages, unknown statuses, browser switching and independent review before delivery.
+## E16 Split-plan discovery capacity
+fidelity: executable
+
+- [x] T16.0 Raise split-plan bound to 256 Owner: coordinator kind: agent stage: implement acc: [256 split Markdown files indexed; root plans counted separately; warning uses new bound; plans remain read-only]
+- [x] T16.1 Verify boundary and independently review Owner: reviewer kind: agent stage: review deps: [T16.0] acc: [28 DGX tests pass; 256 files have no incomplete warning; 257 files warn; exact-head review PASS]
+- [x] T16.2 Merge and verify installed bundle Owner: coordinator kind: agent stage: verify-landed deps: [T16.1] acc: [reviewed tree lands; exact-main CI passes; installed arm64 bundle revision, resources, signature and embedded bound verified]
+
+Delivered PR20: reviewed883d88e PASS; REBASE landed bf00c79cc19c4eb5adf4e9ec704b7895e06df3e9 with tree equality. Candidate workflows37588908007/37588907865 and landed37589131751/37589131703 PASS. Exact-main development bundle installed with prior bundle retained. Relaunch process observed; native window capture unavailable, so no fresh screenshot acceptance claimed. E16 supersedes E15's historical120 capacity; no provider calls, release or deployment. E14 native wheel acceptance remains open.
