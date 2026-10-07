@@ -182,13 +182,15 @@ fidelity: executable
 
 - [x] T15.0 Implement all-plans default and explicit plan filtering Owner: UI worker kind: agent stage: implement acc: [all discovered plans/tasks shown by default; plan filtering reversible; repeated task IDs remain plan-qualified; inspector uses original plan/task; four-per-lane cap removed; indexing warning explicitly describes incomplete discovery]
 - [x] T15.1 Verify aggregate and filtered navigation Owner: coordinator kind: agent stage: verify deps: [T15.0] acc: [tests/build on isolated DGX pass; browser multi-plan repeated IDs, plan/epic filters, selection and full task visibility pass; read-only and provider boundaries preserved]
-- [ ] T15.2 Independent exact-head review Owner: reviewer kind: agent stage: review deps: [T15.1] acc: [base/head and verdict recorded; findings resolved]
-- [ ] T15.3 Guarded rebase merge and landed verification Owner: coordinator kind: agent stage: verify-landed deps: [T15.2c] acc: [reviewed tree lands; exact-main native development artifact verified and installed with previous bundle retained; native launch checked; no release/deploy]
+- [x] T15.2 Independent exact-head review Owner: reviewer kind: agent stage: review deps: [T15.1] acc: [base/head and verdict recorded; findings resolved]
+- [x] T15.3 Guarded rebase merge and landed verification Owner: coordinator kind: agent stage: verify-landed deps: [T15.2c] acc: [reviewed tree lands; exact-main native development artifact verified and installed with previous bundle retained; native launch checked; no release/deploy]
 
 Scope: UI aggregation and source identity, full canvas visibility and clearer discovery-limit disclosure. Scanner capacity policy remains bounded120 split files; no remote ingestion, plan writes or live AI. DGX isolated task worktree/caches; exact pinned Three source reused without dependency edits. Native Mac launch/install exempt; no Mac build/test workers.
 
 - [x] T15.2a Fix accepted E15-R01 warning loss Owner: coordinator kind: agent stage: implement deps: [T15.1] acc: [all scan warnings surfaced;120-file incomplete totals disclosure cannot be hidden by an earlier warning; warning text remains readable/dismissible]
 - [x] T15.2b Verify warning preservation Owner: coordinator kind: agent stage: verify deps: [T15.2a] acc: [tests/build and browser multi-warning path pass]
-- [ ] T15.2c Independent exact-head re-review Owner: reviewer kind: agent stage: review deps: [T15.2b] acc: [E15-R01 closed; full candidate PASS before merge]
+- [x] T15.2c Independent exact-head re-review Owner: reviewer kind: agent stage: review deps: [T15.2b] acc: [E15-R01 closed; full candidate PASS before merge]
 
 Initial review4ae2c9b FAIL E15-R01/P2: only first global scan warning shown. Accepted; merge held for preservation fix, affected verification and exact-head re-review.
+
+E15 delivered: independent full-head reviewc7c8836 PASS vs784dc3c with E15-R01 closed. PR18 guarded REBASE landed `5e6407538912fe068c5cebcd052e55fb45747743`; tree equality and fetched main reachability verified. Candidate37574013982/37574013978 and landed37574286052/37574286119 hosted workflows PASS. Exact-main Mac development bundle verified and safely installed with prior app preserved; native screenshot shows All plans, logo and explicit Serenity incomplete-discovery warning. Neutral144tasks15plans browser acceptance passed; no privateJarmee task-count acceptance claim. No release/deploy/live provider call. Existing E14 native wheel acceptance remains separate.
