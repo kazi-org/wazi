@@ -24,3 +24,5 @@ Delivery: PR #11 was independently reviewed PASS at `fa05e5b827b2a10eee0234c2610
 
 
 Search acceptance — 2026-10-06: owner enabled data-volume indexing and provided `Indexing enabled` readback. Agent readback independently confirms indexing enabled; installed app metadata has display name Wazi and bundle ID org.kazi.wazi; bundle-ID Spotlight query returns the installed application. Owner then confirmed, “It works I can see the app!” in the requested search. This qualifies functional discovery through the owner's CMD+K search; the launcher application brand was not identified and no agent screenshot is claimed. The logo resource and app signature were already verified. No index erase/rebuild or app resource change was performed. Earlier blocked receipts above are historical; T12.0 is now complete.
+
+Acceptance context: the preceding request was to check that Wazi appears with its logo in CMD+K search. The owner replied, “It works I can see the app!” We interpret that reply as acceptance of the requested app-with-logo check; the owner did not separately describe the icon, and no independent agent visual verification is claimed.
