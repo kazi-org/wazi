@@ -38,3 +38,5 @@ AI landed/install receipt: PR #13 rebase-merged at `633c148093f6b41839ee706a57f5
 
 
 Search acceptance — 2026-10-06: after owner-authorized enable-index action, owner and independent agent readback report indexing enabled. Installed app metadata returns Wazi/org.kazi.wazi and Spotlight bundle-ID lookup returns the installed application. Owner confirmed successful app discovery in the requested search. Logo resource/signature evidence remains valid; there is no new agent screenshot or claim about the launcher brand. T13.1a is complete, superseding the historical read-only blocker above. E13 is now 10/10; broader E3 context/provider acceptance remains separate. No live AI request, index erase/rebuild, release or deployment.
+
+Acceptance context: the preceding request was to check that Wazi appears with its logo in CMD+K search. The owner replied, “It works I can see the app!” We interpret that reply as acceptance of the requested app-with-logo check; the owner did not separately describe the icon, and no independent agent visual verification is claimed.
