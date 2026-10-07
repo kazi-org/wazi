@@ -63,7 +63,7 @@ test('keeps pending status for unresolved dependency and emits a warning', async
   assert.match(project.plans[0].warnings.join('\n'), /Unresolved dependency T8\.8/);
 });
 
-test('indexes split plans and resolves cross-file dependency status', async (t) => {
+test('indexes split plans and prefers local repeated dependency IDs', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'wazi-plans-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const repo = path.join(root, 'repo');
@@ -76,7 +76,7 @@ test('indexes split plans and resolves cross-file dependency status', async (t) 
   assert.equal(project.plans.length, 2);
   const [master, split] = project.plans;
   assert.notEqual(master.tasks[0].id, split.tasks[0].id);
-  assert.equal(split.tasks[1].status, 'blocked');
+  assert.equal(split.tasks[1].status, 'pending');
   assert.deepEqual(project.plans.flatMap((plan) => plan.tasks).filter((task) => task.sourceId === 'T1.1').map((task) => task.status), ['pending', 'complete']);
 });
 
@@ -231,4 +231,22 @@ test('scanner stops at git roots and does not invent projects for docs directori
   const result = await scanPlans({ root });
   assert.deepEqual(result.projects.map((project) => project.name), ['actual-repo']);
   assert.equal(result.projects[0].plans.length, 1);
+});
+
+test('dependency status prefers own plan and does not infer ambiguous external IDs', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'wazi-plan-scope-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const repo = path.join(root, 'sample-project');
+  const plans = path.join(repo, 'docs', 'plans');
+  await fs.mkdir(plans, { recursive: true });
+  await fs.writeFile(path.join(plans, 'a.md'), '# A\n- [x] T1.1 Local complete Owner: team\n- [ ] T1.2 Depends on local Owner: team deps: [T1.1]\n');
+  await fs.writeFile(path.join(plans, 'b.md'), '# B\n- [ ] T1.1 Other pending Owner: team\n');
+  await fs.writeFile(path.join(plans, 'c.md'), '# C\n- [ ] T3.1 Ambiguous external Owner: team deps: [T1.1]\n');
+  const result = await scanPlans({root});
+  const project = result.projects[0];
+  const a = project.plans.find(p => p.path.endsWith('/a.md'));
+  const c = project.plans.find(p => p.path.endsWith('/c.md'));
+  assert.equal(a.tasks.find(task => task.sourceId === 'T1.2').status, 'pending');
+  assert.equal(c.tasks[0].status, 'pending');
+  assert.ok(c.warnings.some(warning => warning.includes('Ambiguous dependency T1.1')));
 });
