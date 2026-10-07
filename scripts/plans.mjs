@@ -100,7 +100,12 @@ function applyDependencyStatus(plans) {
   }
   for (const plan of plans) for (const task of plan.tasks) {
     for (const dependency of task.dependencies) {
-      const matches = bySourceId.get(dependency) || [];
+      const localMatches = plan.tasks.filter(candidate => candidate.sourceId === dependency);
+      const matches = localMatches.length ? localMatches : (bySourceId.get(dependency) || []);
+      if (matches.length > 1) {
+        plan.warnings.push(`Ambiguous dependency ${dependency} at ${task.source}; completion not inferred.`);
+        continue;
+      }
       if (!matches.length) {
         plan.warnings.push(`Unresolved dependency ${dependency} at ${task.source}.`);
       } else if (task.status !== 'complete' && matches.some((candidate) => candidate.status !== 'complete')) {
