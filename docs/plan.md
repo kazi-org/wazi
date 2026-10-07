@@ -165,8 +165,8 @@ User selected Swift/AppKit + WKWebView for Mac, Wails for Windows/Linux; phase1 
 
 ## E14 — Column headers follow the scene camera
 
-- [ ] T14.0 Fix projected column headers Owner: UI worker kind: agent stage: implement acc: [headers share lane world positions and camera projection with task cards; zoom/pan/orbit/focus keep each header associated with its column; Map and narrow fallback remain usable]
-- [ ] T14.1 Verify frontend and browser behavior Owner: coordinator kind: agent stage: verify deps: [T14.0] acc: [frontend tests/build pass on qualified DGX lane; browser zoom/pan/Map/reset/selection and narrow layout verified; Three.js source and task visibility scope preserved]
+- [x] T14.0 Fix projected column headers Owner: UI worker kind: agent stage: implement acc: [headers share lane world positions and camera projection with task cards; zoom/pan/orbit/focus keep each header associated with its column; Map and narrow fallback remain usable]
+- [x] T14.1 Verify frontend and browser behavior Owner: coordinator kind: agent stage: verify deps: [T14.0] acc: [frontend tests/build pass on qualified DGX lane; browser zoom/pan/Map/reset/selection and narrow layout verified; Three.js source and task visibility scope preserved]
 - [ ] T14.2 Independently review exact head Owner: reviewer kind: agent stage: review deps: [T14.1] acc: [base/head recorded; accepted findings fixed and verified]
 - [ ] T14.3 Rebase merge and verify landed behavior Owner: coordinator kind: agent stage: verify-landed deps: [T14.2] acc: [guarded merge; landed tree matches reviewed head; installed Mac assets updated safely and native behavior verified; no release/deployment]
 
