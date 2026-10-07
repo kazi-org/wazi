@@ -180,8 +180,8 @@ E14 delivery: PR16 REBASE landed `fb7821896cb2f97cce5638df6bd595e1d548d8b6`, tre
 ## E15 Project-wide plan visibility
 fidelity: executable
 
-- [ ] T15.0 Implement all-plans default and explicit plan filtering Owner: UI worker kind: agent stage: implement acc: [all discovered plans/tasks shown by default; plan filtering reversible; repeated task IDs remain plan-qualified; inspector uses original plan/task; four-per-lane cap removed; indexing warning explicitly describes incomplete discovery]
-- [ ] T15.1 Verify aggregate and filtered navigation Owner: coordinator kind: agent stage: verify deps: [T15.0] acc: [tests/build on isolated DGX pass; browser multi-plan repeated IDs, plan/epic filters, selection and full task visibility pass; read-only and provider boundaries preserved]
+- [x] T15.0 Implement all-plans default and explicit plan filtering Owner: UI worker kind: agent stage: implement acc: [all discovered plans/tasks shown by default; plan filtering reversible; repeated task IDs remain plan-qualified; inspector uses original plan/task; four-per-lane cap removed; indexing warning explicitly describes incomplete discovery]
+- [x] T15.1 Verify aggregate and filtered navigation Owner: coordinator kind: agent stage: verify deps: [T15.0] acc: [tests/build on isolated DGX pass; browser multi-plan repeated IDs, plan/epic filters, selection and full task visibility pass; read-only and provider boundaries preserved]
 - [ ] T15.2 Independent exact-head review Owner: reviewer kind: agent stage: review deps: [T15.1] acc: [base/head and verdict recorded; findings resolved]
 - [ ] T15.3 Guarded rebase merge and landed verification Owner: coordinator kind: agent stage: verify-landed deps: [T15.2] acc: [reviewed tree lands; exact-main native development artifact verified and installed with previous bundle retained; native launch checked; no release/deploy]
 
