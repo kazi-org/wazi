@@ -65,7 +65,7 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
       const w=el.clientWidth,h=el.clientHeight;
       const layout=layoutRef.current;
       const scaleFactor=layout?.tallPlan?layout.sceneHeight/650:1;
-      const minimumScale=layout?.tallPlan?1:0.4;
+      const minimumScale=0.4;
       const nodes=[...nodeRef.current];
       const cards=[...(cardLayer.current?.querySelectorAll('[data-card]')||[])];
       const labels=[...(headerLayer.current?.querySelectorAll('[data-lane-label]')||[])];
