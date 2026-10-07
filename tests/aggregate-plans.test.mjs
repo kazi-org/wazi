@@ -41,3 +41,15 @@ test('plan selection is reversible and same-named epics stay separately scoped',
   assert.notEqual(epics[0].id, epics[1].id);
   assert.equal(aggregatePlanEpics(plans, 'a')[0].id, 'E1');
 });
+
+test('all-plan aggregation retains a 144-task, 15-plan workspace', () => {
+  const plans = Array.from({length:15}, (_, planIndex) => plan(
+    'p'+planIndex,
+    'docs/plans/p'+planIndex+'.md',
+    Array.from({length:planIndex<9?10:9}, (_, taskIndex) => task('T'+taskIndex+'.1')),
+  ));
+  const tasks = aggregatePlanTasks(plans);
+  assert.equal(tasks.length, 144);
+  assert.equal(new Set(tasks.map(item => item.id)).size, 144);
+  assert.equal(tasks.filter(item => item.authoredId === 'T0.1').length, 15);
+});
