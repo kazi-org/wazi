@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test tests/plans.test.mjs tests/desktop.test.mjs tests/repair-projection.test.mjs"
+    "test": "node --test tests/plans.test.mjs tests/desktop.test.mjs tests/repair-projection.test.mjs tests/aggregate-plans.test.mjs"
   },
   "dependencies": {
     "@fontsource-variable/manrope": "^5.3.0",
