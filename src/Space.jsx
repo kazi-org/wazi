@@ -5,7 +5,7 @@ import { CheckCircle, Circle, SpinnerGap, LockSimple } from '@phosphor-icons/rea
 import { lanes, laneFor } from './demo.mjs';
 
 const statusIcons = {complete:CheckCircle, active:SpinnerGap, blocked:LockSimple, pending:Circle};
-export default function Space({ tasks, selected, onSelect, showLinks, resetKey, view, focusKey, filter }) {
+export default function Space({ tasks, selected, onSelect, showLinks, resetKey, view, focusKey, filter, tallPlan=false }) {
   const container = useRef(null), canvas = useRef(null), cardLayer=useRef(null), headerLayer=useRef(null), engine=useRef(null);
   const layoutRef=useRef(null);
   const lastHomeInput=useRef({resetKey,view});
@@ -13,13 +13,15 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
   const [size,setSize]=useState({w:1000,h:650});
   const aspect=size.w/size.h;
   const groups = lanes.map(lane=>({...lane, tasks:tasks.filter(t=>laneFor(t)===lane.id)}));
-  const homeDistance=Math.max(25,44/aspect);
+  const longestLane=Math.max(1,...groups.map(group=>group.tasks.length));
+  const homeDistance=Math.max(25,44/aspect,longestLane*3.4/(2*Math.tan(Math.PI/9))*1.12);
+  const sceneHeight=Math.max(size.h,longestLane*132+120);
   const homeRequested=lastHomeInput.current.resetKey!==resetKey||lastHomeInput.current.view!==view;
-  const layoutDistance=useMemo(()=>homeRequested?homeDistance:engine.current?engine.current.camera.position.distanceTo(engine.current.controls.target):homeDistance,[size.w,size.h,resetKey,view,homeRequested,homeDistance]);
+  const layoutDistance=useMemo(()=>homeRequested?homeDistance:engine.current?engine.current.camera.position.distanceTo(engine.current.controls.target):homeDistance,[size.w,size.h,resetKey,view,homeRequested,homeDistance,longestLane]);
   const columnSpacing=2*Math.tan(Math.PI/9)*layoutDistance*aspect/groups.length*0.92;
   const nodes = groups.flatMap((lane,col)=>lane.tasks.map((task,row)=>({task, color:lane.color, position:new THREE.Vector3((col-(groups.length-1)/2)*columnSpacing, ((lane.tasks.length-1)/2-row)*3.4, Math.sin(col*1.7+row)*0.38), col, row})));
   const nodeRef=useRef(nodes); nodeRef.current=nodes;
-  layoutRef.current={groups,nodes,columnSpacing};
+  layoutRef.current={groups,nodes,columnSpacing,tallPlan,sceneHeight};
   const selection=useRef(selected);selection.current=selected;
   const linksEnabled=useRef(showLinks);linksEnabled.current=showLinks;
   const filterRef=useRef(filter);filterRef.current=filter;
@@ -27,20 +29,20 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
     const el=container.current;
     const scene=new THREE.Scene();
     scene.fog=new THREE.FogExp2('#080c19',0.008);
-    const camera=new THREE.PerspectiveCamera(40,1,0.1,200);
+    const camera=new THREE.PerspectiveCamera(40,1,0.1,Math.max(5000,homeDistance*5));
     const width=el.clientWidth, height=el.clientHeight;
     camera.aspect=width/height;camera.updateProjectionMatrix();
-    const distance=Math.max(25,44/(width/height));
+    const distance=homeDistance;
     camera.position.set(0,3,distance);
     let renderer;
     try {renderer=new THREE.WebGLRenderer({canvas:canvas.current,alpha:true,antialias:true});}
     catch {setFailed(true);return;}
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.7));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.7,8192/Math.max(width,height)));
     renderer.setSize(width,height);
     renderer.setClearColor('#080c19',0);
     const controls=new OrbitControls(camera,canvas.current);
     controls.enableDamping=true; controls.dampingFactor=0.07;
-    controls.minDistance=12; controls.maxDistance=65;
+    controls.minDistance=12; controls.maxDistance=Math.max(300,homeDistance*1.5);
     controls.maxPolarAngle=Math.PI*0.72; controls.minPolarAngle=Math.PI*0.15;
     controls.enablePan=true;
     const grid=new THREE.GridHelper(100,100,'#2a335a','#141b30');
@@ -55,13 +57,15 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
     const starsGeometry=new THREE.BufferGeometry();starsGeometry.setAttribute('position',new THREE.BufferAttribute(starPositions,3));
     const stars=new THREE.Points(starsGeometry,new THREE.PointsMaterial({color:'#8b9ac9',size:0.035,transparent:true,opacity:0.6}));scene.add(stars);
     const graph=new THREE.Group();scene.add(graph);
-    engine.current={scene,camera,controls,graph,renderer,home:()=>{const w=el.clientWidth,h=el.clientHeight;camera.position.set(0,3,Math.max(25,44/(w/h)));controls.target.set(0,0,0);controls.update();}};
-    const resize=new ResizeObserver(()=>{const w=el.clientWidth,h=el.clientHeight; camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);setSize({w,h});});resize.observe(el);
+    engine.current={scene,camera,controls,graph,renderer,home:()=>{const w=el.clientWidth,h=el.clientHeight;const rows=Math.max(1,...(layoutRef.current?.groups||[]).map(group=>group.tasks.length));const fit=Math.max(25,44/(w/h),rows*3.4/(2*Math.tan(Math.PI/9))*1.12);camera.far=Math.max(5000,fit*5);camera.updateProjectionMatrix();camera.position.set(0,3,fit);controls.maxDistance=Math.max(300,fit*1.5);controls.target.set(0,0,0);controls.update();}};
+    const resize=new ResizeObserver(()=>{const w=el.clientWidth,h=el.clientHeight; camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.7,8192/Math.max(w,h)));renderer.setSize(w,h);setSize({w,h});});resize.observe(el);
     let frame;
     const render=()=>{
       frame=requestAnimationFrame(render);controls.update();camera.updateMatrixWorld();camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
       const w=el.clientWidth,h=el.clientHeight;
       const layout=layoutRef.current;
+      const scaleFactor=layout?.tallPlan?layout.sceneHeight/650:1;
+      const minimumScale=layout?.tallPlan?1:0.4;
       const nodes=[...nodeRef.current];
       const cards=[...(cardLayer.current?.querySelectorAll('[data-card]')||[])];
       const labels=[...(headerLayer.current?.querySelectorAll('[data-lane-label]')||[])];
@@ -76,7 +80,7 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
         const node=nodes[i];if(!node)return null;
         const projected=node.position.clone().project(camera);
         const behind=node.position.clone().applyMatrix4(camera.matrixWorldInverse).z>=0;
-        const scale=THREE.MathUtils.clamp(25/camera.position.distanceTo(node.position),0.4,1.4);
+        const scale=THREE.MathUtils.clamp(scaleFactor*25/camera.position.distanceTo(node.position),minimumScale,1.4);
         return {projected,behind,scale,zIndex:String(Math.round(1000-projected.z*500))};
       });
       const labelPositions=labels.map((label,i)=>{
@@ -87,7 +91,7 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
         const anchor=node?.position||new THREE.Vector3((i-(laneCount-1)/2)*layout.columnSpacing,3.4,0);
         const projected=anchor.clone().project(camera);
         const behind=anchor.clone().applyMatrix4(camera.matrixWorldInverse).z>=0;
-        const cardScale=THREE.MathUtils.clamp(25/camera.position.distanceTo(anchor),0.4,1.4);
+        const cardScale=THREE.MathUtils.clamp(scaleFactor*25/camera.position.distanceTo(anchor),minimumScale,1.4);
         const {height:labelHeight,headingFontSize}=labelMetrics[i];
         const labelScale=Math.max(cardScale,9/headingFontSize);
         const cardHeight=node?(cardHeights[nodeIndex]||106)*cardScale:0;
@@ -149,17 +153,33 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
   useEffect(()=>{engine.current?.home();},[resetKey]);
   useEffect(()=>{
     const en=engine.current;if(!en)return;
-    if(view==='map'){en.camera.position.set(0,0,Math.max(25,44/(container.current.clientWidth/container.current.clientHeight)));en.controls.target.set(0,0,0);}
+    if(view==='map'){const fit=Math.max(25,44/(container.current.clientWidth/container.current.clientHeight),longestLane*3.4/(2*Math.tan(Math.PI/9))*1.12);en.camera.far=Math.max(5000,fit*5);en.camera.updateProjectionMatrix();en.camera.position.set(0,0,fit);en.controls.maxDistance=Math.max(300,fit*1.5);en.controls.target.set(0,0,0);}
     else en.home();
     en.controls.enableRotate=view==='space';en.controls.update();
-  },[view]);
+  },[view,homeDistance,longestLane]);
   useEffect(()=>{if(!focusKey)return;const en=engine.current,node=nodes.find(n=>n.task.id===selected);if(en&&node){const offset=en.camera.position.clone().sub(en.controls.target);en.controls.target.copy(node.position);en.camera.position.copy(node.position.clone().add(offset.multiplyScalar(0.72)));en.controls.update();}},[focusKey]);
+  useEffect(()=>{
+    if(!tallPlan||!engine.current)return;
+    const scene=container.current,area=scene?.parentElement;
+    const chosen=focusKey&&selected?nodeRef.current.find(node=>node.task.id===selected):nodeRef.current[0];
+    if(!scene||!area||!chosen)return;
+    let firstFrame,secondFrame;
+    firstFrame=requestAnimationFrame(()=>{secondFrame=requestAnimationFrame(()=>{
+      const en=engine.current;if(!en)return;
+      en.controls.update();en.camera.updateMatrixWorld();en.camera.matrixWorldInverse.copy(en.camera.matrixWorld).invert();
+      const projected=chosen.position.clone().project(en.camera);
+      const screenY=(-projected.y*0.5+0.5)*scene.clientHeight;
+      const desired=focusKey&&selected?screenY-area.clientHeight/2:screenY-180;
+      area.scrollTop=Math.max(0,Math.min(desired,area.scrollHeight-area.clientHeight));
+    });});
+    return()=>{cancelAnimationFrame(firstFrame);cancelAnimationFrame(secondFrame);};
+  },[tallPlan,tasks,resetKey,focusKey,selected,size.w,size.h]);
   const connectedIds=new Set(selected?[selected,...(tasks.find(t=>t.id===selected)?.dependencies||[]),...tasks.filter(t=>t.dependencies.includes(selected)).map(t=>t.id)]:[]);
-  return <div className={`space ${failed?'no-webgl':''}`} ref={container}>
+  return <div className={"space"+(failed?" no-webgl":"")+(tallPlan?" tall-plan":"")} style={tallPlan?{height:sceneHeight+"px"}:undefined} ref={container} onWheelCapture={event=>{if(!tallPlan||event.ctrlKey)return;const area=event.currentTarget.closest(".space-scroll");if(area){area.scrollTop+=event.deltaY;event.stopPropagation();}}}>
     <canvas ref={canvas} aria-label="Interactive 3D task dependency map" />
     <div className="lane-labels" ref={headerLayer}>{groups.map((g,i)=><div data-lane-label key={g.id} style={{'--lane-color':g.color}}><span className="lane-number">0{i+1}</span><strong>{g.title}</strong><span className="lane-count">{g.tasks.length}</span><small>{g.subtitle}</small></div>)}</div>
-    <div className="card-layer" ref={cardLayer}>{nodes.map(({task,color})=>{const Icon=statusIcons[task.status]||Circle;const statusText=task.authoredStatusLabel||(task.status==='complete'&&task.authoredStatus==='checked'?'Marked done':task.status);return <button data-card key={task.id} aria-label={`${task.id}: ${task.title}, ${statusText}`} aria-pressed={selected===task.id} onClick={()=>onSelect(task.id)} className={`task-card ${task.status} ${selected===task.id?'selected':''} ${selected&&!connectedIds.has(task.id)?'muted':''} ${filter!=='all'&&task.status!==filter?'filtered':''}`} style={{'--lane-color':color}}>
-      <div className="card-meta"><span>{task.id}</span><Icon size={14} weight={task.status==='complete'?'fill':'regular'}/></div>
+    <div className="card-layer" ref={cardLayer}>{nodes.map(({task,color})=>{const Icon=statusIcons[task.status]||Circle;const statusText=task.authoredStatusLabel||(task.status==='complete'&&task.authoredStatus==='checked'?'Marked done':task.status);return <button data-card key={task.id} aria-label={`${task.planLabel?task.planLabel+', ':''}${task.authoredId||task.id}: ${task.title}, ${statusText}`} aria-pressed={selected===task.id} onClick={()=>onSelect(task.id)} className={`task-card ${task.status} ${selected===task.id?'selected':''} ${selected&&!connectedIds.has(task.id)?'muted':''} ${filter!=='all'&&task.status!==filter?'filtered':''}`} style={{'--lane-color':color}}>
+      <div className="card-meta"><span>{task.authoredId||task.id}</span>{task.planLabel&&<small className="task-plan-name" title={task.planLabel}>{task.planLabel}</small>}<Icon size={14} weight={task.status==='complete'?'fill':'regular'}/></div>
       <strong>{task.title}</strong><div className="card-foot"><span>{task.owner||'Unassigned'}</span><span>{task.dependencies.length?`${task.dependencies.length} dependencies`:'Entry point'}</span></div>
     </button>})}</div>
     {failed&&<div className="webgl-error">3D rendering is unavailable in this browser. Use the task list to explore this plan.</div>}
