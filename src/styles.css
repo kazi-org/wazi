@@ -77,3 +77,5 @@
 .space.no-webgl .lane-labels{position:absolute;inset:20px 20px auto;display:flex;flex-wrap:wrap;justify-content:center;gap:12px;height:auto;overflow:visible}.space.no-webgl .lane-labels>div{position:relative;left:auto!important;top:auto!important;visibility:visible!important;transform:none!important;transform-origin:initial!important;min-height:0;padding:5px 8px}.space.no-webgl .lane-labels small{position:static}
 
 .task-plan-name{max-width:82px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:7px 'IBM Plex Mono',monospace;color:#7483a2;margin-left:auto}.card-meta .task-plan-name+svg{margin-left:5px}
+
+.toast>span{white-space:pre-line;max-height:160px;overflow-y:auto}
