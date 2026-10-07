@@ -8,7 +8,7 @@ export { parsePlan } from '../src/plan-parser.mjs';
 
 const MAX_DEPTH = 3;
 const MAX_ENTRIES = 12000;
-const MAX_SPLIT_PLANS = 120;
+const MAX_SPLIT_PLANS = 256;
 const MAX_FILE_BYTES = 1_000_000;
 const SKIP_DIRS = new Set([
   '.git', '.hg', '.svn', 'node_modules', 'bower_components', 'vendor',
