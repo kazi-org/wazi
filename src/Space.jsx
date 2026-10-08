@@ -84,20 +84,27 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
         const scale=THREE.MathUtils.clamp(scaleFactor*25/camera.position.distanceTo(node.position),minimumScale,1.4);
         return {projected,behind,scale,zIndex:String(Math.round(1000-projected.z*500))};
       });
+      const laneCount=layout?.groups.length||1;
+      const laneAnchors=labels.map((_,i)=>{
+        const nodeIndex=layout?.nodes.findIndex(node=>node.col===i&&node.row===0)??-1;
+        const node=nodeIndex>=0?layout.nodes[nodeIndex]:null;
+        return node?.position||new THREE.Vector3((i-(laneCount-1)/2)*(layout?.columnSpacing||1),3.4,0);
+      });
+      const laneCenters=laneAnchors.map(anchor=>(anchor.clone().project(camera).x*0.5+0.5)*w);
       const labelPositions=labels.map((label,i)=>{
         if(!layout)return null;
-        const nodeIndex=layout.nodes.findIndex(node=>node.col===i&&node.row===0);
-        const node=nodeIndex>=0?layout.nodes[nodeIndex]:null;
-        const laneCount=layout.groups.length||1;
-        const anchor=node?.position||new THREE.Vector3((i-(laneCount-1)/2)*layout.columnSpacing,3.4,0);
+        const anchor=laneAnchors[i];
         const projected=anchor.clone().project(camera);
         const behind=anchor.clone().applyMatrix4(camera.matrixWorldInverse).z>=0;
         const cardScale=THREE.MathUtils.clamp(scaleFactor*25/camera.position.distanceTo(anchor),minimumScale,1.4);
         const {headingFontSize}=labelMetrics[i];
         const labelScale=Math.max(cardScale,9/headingFontSize);
+        const nearestGap=laneCenters.reduce((closest,center,j)=>j===i?closest:Math.min(closest,Math.abs(center-laneCenters[i])),Infinity);
+        const labelWidth=Number.isFinite(nearestGap)?Math.max(1,nearestGap-6):Math.max(1,w-24);
         return {
           projected,behind,labelScale,
-          left:String((projected.x*0.5+0.5)*w),
+          left:String(laneCenters[i]),
+          width:String(labelWidth),
           top:String(scrollTop+8),
           zIndex:String(Math.round(1000-projected.z*500))
         };
@@ -116,6 +123,7 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
         label.style.transformOrigin='top center';
         label.style.transform='translateX(-50%) scale('+placement.labelScale+')';
         label.style.left=placement.left+'px';
+        label.style.width=(Number(placement.width)/placement.labelScale)+'px';
         label.style.top=placement.top+'px';
         label.style.visibility=placement.behind||placement.projected.z>1?'hidden':'visible';
         label.style.zIndex=placement.zIndex;
@@ -175,7 +183,7 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
   const connectedIds=new Set(selected?[selected,...(tasks.find(t=>t.id===selected)?.dependencies||[]),...tasks.filter(t=>t.dependencies.includes(selected)).map(t=>t.id)]:[]);
   return <div className={"space"+(failed?" no-webgl":"")+(tallPlan?" tall-plan":"")} style={tallPlan?{height:sceneHeight+"px"}:undefined} ref={container} onWheelCapture={event=>{if(!tallPlan||event.ctrlKey)return;const area=event.currentTarget.closest(".space-scroll");if(area){area.scrollTop+=event.deltaY;event.stopPropagation();}}}>
     <canvas ref={canvas} aria-label="Interactive 3D task dependency map" />
-    <div className="lane-labels" ref={headerLayer}>{groups.map((g,i)=>{const count=groupCounts[g.id]||{showing:g.tasks.length,total:g.tasks.length};return <div data-lane-label key={g.id} style={{'--lane-color':g.color}}><span className="lane-number">0{i+1}</span><strong>{g.title}</strong><span className="lane-count">{count.showing} / {count.total}</span><small>{g.subtitle}</small></div>;})}</div>
+    <div className="lane-labels" ref={headerLayer}>{groups.map((g,i)=>{const count=groupCounts[g.id]||{showing:g.tasks.length,total:g.tasks.length};return <div data-lane-label title={g.title} key={g.id} style={{'--lane-color':g.color}}><span className="lane-number">0{i+1}</span><strong>{g.title}</strong><span className="lane-count">{count.showing} / {count.total}</span><small>{g.subtitle}</small></div>;})}</div>
     <div className="card-layer" ref={cardLayer}>{nodes.map(({task,color})=>{const Icon=statusIcons[task.status]||Circle;const statusText=task.authoredStatusLabel||(task.status==='complete'&&task.authoredStatus==='checked'?'Marked done':task.status);return <button data-card key={task.id} aria-label={`${task.planLabel?task.planLabel+', ':''}${task.authoredId||task.id}: ${task.title}, ${statusText}`} aria-pressed={selected===task.id} onClick={()=>onSelect(task.id)} className={`task-card ${task.status} ${selected===task.id?'selected':''} ${selected&&!connectedIds.has(task.id)?'muted':''}`} style={{'--lane-color':color}}>
       <div className="card-meta"><span>{task.authoredId||task.id}</span>{task.planLabel&&<small className="task-plan-name" title={task.planLabel}>{task.planLabel}</small>}<Icon size={14} weight={task.status==='complete'?'fill':'regular'}/></div>
       <strong>{task.title}</strong><div className="card-foot"><span>{task.owner||'Unassigned'}</span><span>{task.dependencies.length?`${task.dependencies.length} dependencies`:'Entry point'}</span></div>

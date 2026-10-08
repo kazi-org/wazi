@@ -96,3 +96,7 @@
 @media(max-width:700px){.status-legend{left:10px;right:10px;max-width:none;justify-content:flex-start;gap:7px}.column-limit>span{display:none}}
 
 .all-tasks .dependency-row strong{overflow-wrap:anywhere}
+
+/* Keep projected lane headings inside the gap to their neighbors on narrow Map views. */
+.lane-labels>div{box-sizing:border-box;overflow:hidden}
+@media(max-width:600px){.lane-labels>div{padding-left:2px;padding-right:2px}.lane-labels strong{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
