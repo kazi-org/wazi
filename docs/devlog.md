@@ -282,3 +282,8 @@ E15-R01 verification3c016b0:27tests/buildPASS; browser two120-file-cap fixtures 
 2026-10-06 E15 landing/install: PR18 REBASE5e64075 equals independent reviewedc7c8836 tree; candidate and exact-main contract/frontend/native checks PASS. Mac bundle sourceRevision5e64075 with arm64/resources/ad-hoc signature verified before/after atomic install; old bundle retained. CUA native launch screenshot confirms All plans and clearer120-file Serenity warning with original logo. Browser neutral144/15, filter/identity/full-list/dense-focus/narrow acceptance applies to identical runtime tree. No screenshots/privateplans committed, Mac build/test suites or provider calls. Documentation-only closeout separately reviewed; native wheel automation gap from E14 is not claimed closed.
 
 2026-10-07: Raised split-plan discovery from 120 to 256. DGX node --test tests/plans.test.mjs passed 18 tests, including exactly 256 files without an incomplete warning and 257 files with a 256-file warning. No plan writes, portable contract or Three dependency changes.
+
+
+## Status grouping
+
+Status-column correction in progress: observed a milestone-staged project place every task under Other. Added a status grouping without rewriting source plans. All 30 Node tests passed on the isolated Linux lane. Frontend production build passed with the existing bundle-size warning. Browser verification imported a synthetic milestone-staged plan: one planned, one blocked, one marked done appeared in separate columns; delivery-stage switching and Map view were exercised. Native installed-app acceptance and independent exact-head review remain pending.

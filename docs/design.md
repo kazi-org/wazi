@@ -110,3 +110,8 @@ Mac discovery uses existing correct bundle metadata and scoped registration/impo
 2026-10-06 E15 supersedes the prototype four-per-lane cap: selecting a project opens All plans; selecting one plan narrows the view. Canvas/list/counts use all recognized tasks in the current plan scope. UI identity binds source plan and authored task ID; host inspection keeps the original plan/task identity and dependency edges stay within their authored plan. Repeated epic/task IDs across plans must not merge records. Plan discovery remains bounded to120 direct split Markdown files, with a clear incomplete-discovery warning; All plans means all indexed plans, not an assertion of exhaustive disk discovery.
 
 The split-plan discovery bound is now 256 Markdown files per project; the existing incomplete-discovery warning remains when additional eligible files are skipped. Root plans are counted separately.
+
+
+## Status grouping
+
+Status columns are the default observatory grouping. A toolbar selector retains the delivery-stage view. Milestone labels and raw task stages are preserved; unsupported stages remain Other only in the delivery-stage view. Marked done is a source report, not independent acceptance. Unknown statuses are visible rather than discarded.
