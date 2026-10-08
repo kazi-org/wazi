@@ -115,3 +115,6 @@ The split-plan discovery bound is now 256 Markdown files per project; the existi
 ## Status grouping
 
 Status columns are the default observatory grouping. A toolbar selector retains the delivery-stage view. Milestone labels and raw task stages are preserved; unsupported stages remain Other only in the delivery-stage view. Marked done is a source report, not independent acceptance. Unknown statuses are visible rather than discarded.
+
+## Filtered readable columns
+Status filters exclude nonmatching tasks before layout and dependency rendering. The canvas column selector defaults to5 and offers10,20 andAll; this display bound does not truncate discovery, aggregate totals, or the complete filtered task list. Column headings distinguish displayed counts from eligible totals. Concise cards clamp long source titles; the inspector retains full text at bounded typography. Headings stay visible during column browsing and remain aligned with camera-projected columns. Source text and authored statuses remain read-only.

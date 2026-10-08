@@ -207,3 +207,11 @@ fidelity: executable
 - [x] T16.2 Merge and verify installed bundle Owner: coordinator kind: agent stage: verify-landed deps: [T16.1] acc: [reviewed tree lands; exact-main CI passes; installed arm64 bundle revision, resources, signature and embedded bound verified]
 
 Delivered PR20: reviewed883d88e PASS; REBASE landed bf00c79cc19c4eb5adf4e9ec704b7895e06df3e9 with tree equality. Candidate workflows37588908007/37588907865 and landed37589131751/37589131703 PASS. Exact-main development bundle installed with prior bundle retained. Relaunch process observed; native window capture unavailable, so no fresh screenshot acceptance claimed. E16 supersedes E15's historical120 capacity; no provider calls, release or deployment. E14 native wheel acceptance remains open.
+
+## E17 Readable filtered columns
+fidelity: executable
+
+- [x] T17.0 Filter displayed nodes and bound columns Owner: UI worker kind: agent stage: implement acc: [status filters remove nonmatching cards and links; selector defaults5 with5/10/20/All; display counts distinguish shown from total; task list retains complete filtered access]
+- [x] T17.1 Bound card and inspector text and retain visible headers Owner: UI worker kind: agent stage: implement deps: [T17.0] acc: [long titles do not overlap; full source text stays inspectable; status and stage headers remain associated with columns during browsing and zoom]
+- [x] T17.2 Verify synthetic dense and mixed-status scenarios Owner: coordinator kind: agent stage: verify deps: [T17.1] acc: [tests/build pass; real browser verifies filters, limits, long text, headers, plan selection and narrow layout]
+- [ ] T17.3 Independent exact-head review and guarded merge Owner: reviewer kind: agent stage: review deps: [T17.2] acc: [findings fixed; reviewed tree lands; native artifact installed and verified; limitations recorded]
