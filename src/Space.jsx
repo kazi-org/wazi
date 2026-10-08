@@ -2,17 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CheckCircle, Circle, SpinnerGap, LockSimple } from '@phosphor-icons/react';
-import { lanes, laneFor } from './demo.mjs';
+import { groupTasks } from './task-groups.mjs';
 
 const statusIcons = {complete:CheckCircle, active:SpinnerGap, blocked:LockSimple, pending:Circle};
-export default function Space({ tasks, selected, onSelect, showLinks, resetKey, view, focusKey, filter, tallPlan=false }) {
+export default function Space({ tasks, selected, onSelect, showLinks, resetKey, view, focusKey, filter, tallPlan=false, grouping='status' }) {
   const container = useRef(null), canvas = useRef(null), cardLayer=useRef(null), headerLayer=useRef(null), engine=useRef(null);
   const layoutRef=useRef(null);
   const lastHomeInput=useRef({resetKey,view});
   const [failed,setFailed]=useState(false);
   const [size,setSize]=useState({w:1000,h:650});
   const aspect=size.w/size.h;
-  const groups = lanes.map(lane=>({...lane, tasks:tasks.filter(t=>laneFor(t)===lane.id)}));
+  const groups = groupTasks(tasks, grouping);
   const longestLane=Math.max(1,...groups.map(group=>group.tasks.length));
   const homeDistance=Math.max(25,44/aspect,longestLane*3.4/(2*Math.tan(Math.PI/9))*1.12);
   const sceneHeight=Math.max(size.h,longestLane*132+120);
@@ -149,7 +149,7 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
         arrow.position.copy(b);arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction);arrow.userData={link:true,ids:[node.task.id,dependency]};en.graph.add(arrow);
       }
     }
-  },[tasks,size]);
+  },[tasks,size,grouping,resetKey]);
   useEffect(()=>{engine.current?.home();},[resetKey]);
   useEffect(()=>{
     const en=engine.current;if(!en)return;

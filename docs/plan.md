@@ -194,3 +194,8 @@ Scope: UI aggregation and source identity, full canvas visibility and clearer di
 Initial review4ae2c9b FAIL E15-R01/P2: only first global scan warning shown. Accepted; merge held for preservation fix, affected verification and exact-head re-review.
 
 E15 delivered: independent full-head reviewc7c8836 PASS vs784dc3c with E15-R01 closed. PR18 guarded REBASE landed `5e6407538912fe068c5cebcd052e55fb45747743`; tree equality and fetched main reachability verified. Candidate37574013982/37574013978 and landed37574286052/37574286119 hosted workflows PASS. Exact-main Mac development bundle verified and safely installed with prior app preserved; native screenshot shows All plans, logo and explicit Serenity incomplete-discovery warning. Neutral144tasks15plans browser acceptance passed; no privateJarmee task-count acceptance claim. No release/deploy/live provider call. Existing E14 native wheel acceptance remains separate.
+
+
+## Status grouping
+
+- [ ] Status grouping: render source statuses as columns, retain delivery stages and task metadata; verify mixed stages, unknown statuses, browser switching and independent review before delivery.
