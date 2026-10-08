@@ -5,7 +5,7 @@ import { CheckCircle, Circle, SpinnerGap, LockSimple } from '@phosphor-icons/rea
 import { groupTasks } from './task-groups.mjs';
 
 const statusIcons = {complete:CheckCircle, active:SpinnerGap, blocked:LockSimple, pending:Circle};
-export default function Space({ tasks, selected, onSelect, showLinks, resetKey, view, focusKey, filter, tallPlan=false, grouping='status' }) {
+export default function Space({ tasks, selected, onSelect, showLinks, resetKey, view, focusKey, filter, tallPlan=false, grouping='status', groupCounts={} }) {
   const container = useRef(null), canvas = useRef(null), cardLayer=useRef(null), headerLayer=useRef(null), engine=useRef(null);
   const layoutRef=useRef(null);
   const lastHomeInput=useRef({resetKey,view});
@@ -70,11 +70,12 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
       const cards=[...(cardLayer.current?.querySelectorAll('[data-card]')||[])];
       const labels=[...(headerLayer.current?.querySelectorAll('[data-lane-label]')||[])];
       // Read every DOM measurement before changing any projected style.
-      const cardHeights=cards.map(card=>card.offsetHeight);
+      const scrollContainer=container.current?.parentElement;
+      const scrollTop=layout?.tallPlan?(scrollContainer?.scrollTop||0):0;
       const labelMetrics=labels.map(label=>{
         const heading=label.querySelector('strong');
         const headingFontSize=heading?parseFloat(window.getComputedStyle(heading).fontSize):12;
-        return {height:label.offsetHeight,headingFontSize:headingFontSize||12};
+        return {headingFontSize:headingFontSize||12};
       });
       const cardPositions=cards.map((card,i)=>{
         const node=nodes[i];if(!node)return null;
@@ -92,15 +93,12 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
         const projected=anchor.clone().project(camera);
         const behind=anchor.clone().applyMatrix4(camera.matrixWorldInverse).z>=0;
         const cardScale=THREE.MathUtils.clamp(scaleFactor*25/camera.position.distanceTo(anchor),minimumScale,1.4);
-        const {height:labelHeight,headingFontSize}=labelMetrics[i];
+        const {headingFontSize}=labelMetrics[i];
         const labelScale=Math.max(cardScale,9/headingFontSize);
-        const cardHeight=node?(cardHeights[nodeIndex]||106)*cardScale:0;
-        const gap=12*cardScale;
-        const headerHeight=labelHeight*labelScale;
         return {
           projected,behind,labelScale,
           left:String((projected.x*0.5+0.5)*w),
-          top:String((-projected.y*0.5+0.5)*h-cardHeight/2-gap-headerHeight),
+          top:String(scrollTop+8),
           zIndex:String(Math.round(1000-projected.z*500))
         };
       });
@@ -177,8 +175,8 @@ export default function Space({ tasks, selected, onSelect, showLinks, resetKey, 
   const connectedIds=new Set(selected?[selected,...(tasks.find(t=>t.id===selected)?.dependencies||[]),...tasks.filter(t=>t.dependencies.includes(selected)).map(t=>t.id)]:[]);
   return <div className={"space"+(failed?" no-webgl":"")+(tallPlan?" tall-plan":"")} style={tallPlan?{height:sceneHeight+"px"}:undefined} ref={container} onWheelCapture={event=>{if(!tallPlan||event.ctrlKey)return;const area=event.currentTarget.closest(".space-scroll");if(area){area.scrollTop+=event.deltaY;event.stopPropagation();}}}>
     <canvas ref={canvas} aria-label="Interactive 3D task dependency map" />
-    <div className="lane-labels" ref={headerLayer}>{groups.map((g,i)=><div data-lane-label key={g.id} style={{'--lane-color':g.color}}><span className="lane-number">0{i+1}</span><strong>{g.title}</strong><span className="lane-count">{g.tasks.length}</span><small>{g.subtitle}</small></div>)}</div>
-    <div className="card-layer" ref={cardLayer}>{nodes.map(({task,color})=>{const Icon=statusIcons[task.status]||Circle;const statusText=task.authoredStatusLabel||(task.status==='complete'&&task.authoredStatus==='checked'?'Marked done':task.status);return <button data-card key={task.id} aria-label={`${task.planLabel?task.planLabel+', ':''}${task.authoredId||task.id}: ${task.title}, ${statusText}`} aria-pressed={selected===task.id} onClick={()=>onSelect(task.id)} className={`task-card ${task.status} ${selected===task.id?'selected':''} ${selected&&!connectedIds.has(task.id)?'muted':''} ${filter!=='all'&&task.status!==filter?'filtered':''}`} style={{'--lane-color':color}}>
+    <div className="lane-labels" ref={headerLayer}>{groups.map((g,i)=>{const count=groupCounts[g.id]||{showing:g.tasks.length,total:g.tasks.length};return <div data-lane-label key={g.id} style={{'--lane-color':g.color}}><span className="lane-number">0{i+1}</span><strong>{g.title}</strong><span className="lane-count">{count.showing} / {count.total}</span><small>{g.subtitle}</small></div>;})}</div>
+    <div className="card-layer" ref={cardLayer}>{nodes.map(({task,color})=>{const Icon=statusIcons[task.status]||Circle;const statusText=task.authoredStatusLabel||(task.status==='complete'&&task.authoredStatus==='checked'?'Marked done':task.status);return <button data-card key={task.id} aria-label={`${task.planLabel?task.planLabel+', ':''}${task.authoredId||task.id}: ${task.title}, ${statusText}`} aria-pressed={selected===task.id} onClick={()=>onSelect(task.id)} className={`task-card ${task.status} ${selected===task.id?'selected':''} ${selected&&!connectedIds.has(task.id)?'muted':''}`} style={{'--lane-color':color}}>
       <div className="card-meta"><span>{task.authoredId||task.id}</span>{task.planLabel&&<small className="task-plan-name" title={task.planLabel}>{task.planLabel}</small>}<Icon size={14} weight={task.status==='complete'?'fill':'regular'}/></div>
       <strong>{task.title}</strong><div className="card-foot"><span>{task.owner||'Unassigned'}</span><span>{task.dependencies.length?`${task.dependencies.length} dependencies`:'Entry point'}</span></div>
     </button>})}</div>
