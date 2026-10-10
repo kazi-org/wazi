@@ -118,3 +118,9 @@ Status columns are the default observatory grouping. A toolbar selector retains 
 
 ## Filtered readable columns
 Status filters exclude nonmatching tasks before layout and dependency rendering. The canvas column selector defaults to5 and offers10,20 andAll; this display bound does not truncate discovery, aggregate totals, or the complete filtered task list. Column headings distinguish displayed counts from eligible totals. Concise cards clamp long source titles; the inspector retains full text at bounded typography. Headings stay visible during column browsing and remain aligned with camera-projected columns. Source text and authored statuses remain read-only.
+
+## Collapsible central header rows
+
+The overview and plan view controls above the observatory canvas can be collapsed independently. Their controls remain available as compact restore buttons in the same order, preserving the selected plan and current canvas state while returning vertical space to the work view. Both controls expose their expanded state to assistive technology.
+
+Collapse-layout correction: position disclosure buttons outside the overview and toolbar flex flow, preserving the original two-column alignment. Hidden rows share one compact 30px restore strip. Toolbar fields wrap in narrow windows.

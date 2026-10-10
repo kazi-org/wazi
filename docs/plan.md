@@ -217,3 +217,11 @@ fidelity: executable
 - [x] T17.3 Independent exact-head review and guarded merge Owner: reviewer kind: agent stage: review deps: [T17.2] acc: [findings fixed; reviewed tree lands; native artifact installed and verified; limitations recorded]
 
 E17 delivered PR23: exactff4f19d independentPASS; REBASE landedcfed85a55771f4b220fb908e5e5d617dccde8928 treeequal. Candidate37854509330/37854509381 and landed37854729778/37854729840 PASS. Exactmain arm64developmentbundle installed; resourcehashes, architecture, signature and manifestrevision verified; previousapp retained. Native process relaunched but windowcapture unavailable; browseracceptance is qualified, no freshnative screenshotclaim. E14 nativewheel acceptance remainsseparate. Ownedpreview/tunnel stopped; artifactsretained.
+
+## 2026-10-09 UI refinement
+
+Delivered: the central overview and view-control rows collapse independently, retain plan/canvas state, and provide accessible restore controls.
+
+Collapse-layout correction delivered locally: original header alignment restored and restore buttons share one compact strip. Browser interaction and narrow layout checks passed; native bundle rebuilt and launched, native visual acceptance pending because window capture is unavailable.
+
+2026-10-10 collapse-layout native acceptance complete: corrected bundle installed and opened, both rows collapsed/restored through native CUA, expanded layout visually verified.

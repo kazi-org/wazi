@@ -100,3 +100,14 @@
 /* Keep projected lane headings inside the gap to their neighbors on narrow Map views. */
 .lane-labels>div{box-sizing:border-box;overflow:hidden}
 @media(max-width:600px){.lane-labels>div{padding-left:2px;padding-right:2px}.lane-labels strong{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+
+/* Keep disclosure controls outside each row's two-column content layout. */
+.overview,.canvas-toolbar{position:relative}
+.overview .collapse-top-row{position:absolute;right:26px;top:5px;width:26px;height:26px}
+.canvas-toolbar{padding-right:36px}
+.canvas-toolbar .collapse-top-row{position:absolute;right:0;top:4px;width:26px;height:26px}
+.collapsed-top-rows{display:flex;justify-content:flex-end;align-items:center;gap:12px;flex-shrink:0;min-height:30px;padding:2px 31px}
+.restore-top-row{display:flex;align-items:center;gap:5px;padding:4px 6px;border-radius:4px;color:#9aa8c4;font-size:10px;white-space:nowrap}
+.restore-top-row:hover{background:#171f33}
+@media(max-width:1270px){.overview .collapse-top-row{right:20px}.collapsed-top-rows{padding-right:24px}}
+@media(max-width:700px){.overview .collapse-top-row{right:14px;top:0}.collapsed-top-rows{padding-right:16px;gap:6px}.canvas-toolbar{flex-wrap:wrap}.canvas-toolbar .toolbar-fields{flex-wrap:wrap}}
