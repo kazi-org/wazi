@@ -207,7 +207,7 @@ func (b *boundedBuffer) Write(p []byte) (int, error) {
 	return n, nil
 }
 func (s *Service) Discover(ctx context.Context) (Scan, error) {
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 75*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, s.Node, s.Bridge, s.Root)
 	var out, stderr boundedBuffer

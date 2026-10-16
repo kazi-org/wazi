@@ -18,11 +18,11 @@ export function ObservatoryPanel({project, plan, task, onNavigate}) {
     ++fileGeneration.current;deepController.current?.controller.abort();
     setSnapshot(null);setContext(null);setAnswer(null);setFile(null);setSaved([]);setError('');setDeepError('');setBusy(false);
     if(!project.hosted)return ()=>controller.abort();
-    hostRequest('/api/project',{projectId:project.id},controller.signal).then(value=>{if(plan.sourceDigest&&value.planDigests?.[plan.path]!==plan.sourceDigest)throw new Error('The source plan changed. Refresh local projects before reviewing links or requesting analysis.');if(generation.current===lease)setSnapshot(value);}).catch(e=>{if(e.name!=='AbortError'&&generation.current===lease)setError(e.message);});
+    hostRequest('/api/project',{projectId:project.id},controller.signal).then(value=>{if(plan.sourceDigest&&value.planDigests?.[plan.path]!==plan.sourceDigest)throw new Error('Local source differs from the displayed plan. Code links and analysis require matching plan content.');if(generation.current===lease)setSnapshot(value);}).catch(e=>{if(e.name!=='AbortError'&&generation.current===lease)setError(e.message);});
     hostRequest('/api/context',{projectId:project.id},controller.signal).then(value=>{if(generation.current===lease)setContext(value);}).catch(e=>{if(e.name!=='AbortError'&&generation.current===lease)setContext({unavailable:e.message});});
     hostRequest('/api/deep/list',{projectId:project.id},controller.signal).then(value=>{if(generation.current===lease)setSaved(value.results||[]);}).catch(()=>{});
     return ()=>{controller.abort();};
-  },[project.id,refresh]);
+  },[project.id,plan.path,plan.sourceDigest,refresh]);
   useEffect(()=>{setAnswer(null);setDeepError('');setBusy(false);},[plan.path,task.id]);
   useEffect(()=>{
     if(!context?.expiresAt)return;

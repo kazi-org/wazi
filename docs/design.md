@@ -124,3 +124,11 @@ Status filters exclude nonmatching tasks before layout and dependency rendering.
 The overview and plan view controls above the observatory canvas can be collapsed independently. Their controls remain available as compact restore buttons in the same order, preserving the selected plan and current canvas state while returning vertical space to the work view. Both controls expose their expanded state to assistive technology.
 
 Collapse-layout correction: position disclosure buttons outside the overview and toolbar flex flow, preserving the original two-column alignment. Hidden rows share one compact 30px restore strip. Toolbar fields wrap in narrow windows.
+
+## Origin plan freshness
+
+Repository plans are read from origin's advertised default-branch HEAD, freshly fetched on every scan into an invocation-private ref. All plan blobs and SHA256 digests in one project are pinned to that commit; local main, feature branches, index and working files do not select the displayed plans. Fetches update the Git object database only, with temporary refs removed afterward; no checkout, pull, source write, or cached-ref fallback occurs. Discovery includes Git roots without local plans, so newly added remote plans appear and remote deletions remove old plans. Standalone non-Git plan directories and explicit imports retain their separate local behavior.
+
+The UI displays origin and the commit, with fetch time in the badge tooltip. It refreshes at startup, manually, on focus/visibility return and every minute while visible, with one UI scan in flight. This is a snapshot as of the successful fetch, not continuous synchronization. Failure omits that repository and reports a warning; request-wide failure removes previous repository results. Network work uses eight concurrent repositories, 12-second command bounds and a 60-second shared scan deadline; the host parser allowance is 75 seconds. Existing discovery/file limits remain. Origin errors omit Git stderr to avoid exposing credential-bearing URLs.
+
+Code links and provider analysis remain local and digest-guarded. A remote plan can be viewed with a stale checkout, but analysis requires matching local plan bytes. Inspector requests reset when the selected plan digest changes. This change does not update local source to satisfy analysis.

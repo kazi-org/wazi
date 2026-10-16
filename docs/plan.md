@@ -225,3 +225,7 @@ Delivered: the central overview and view-control rows collapse independently, re
 Collapse-layout correction delivered locally: original header alignment restored and restore buttons share one compact strip. Browser interaction and narrow layout checks passed; native bundle rebuilt and launched, native visual acceptance pending because window capture is unavailable.
 
 2026-10-10 collapse-layout native acceptance complete: corrected bundle installed and opened, both rows collapsed/restored through native CUA, expanded layout visually verified.
+
+## Origin plan freshness (2026-10-16)
+
+Implemented locally: fetch origin's default-branch HEAD and display commit-pinned plans independently of local branch/files; show commit provenance; refresh while visible and on return; omit unavailable origins without stale/local fallback. Standalone files/imports remain explicit local inputs. Source and local verification only; not merged or installed as a native app. Verification details are in docs/devlog.md.
