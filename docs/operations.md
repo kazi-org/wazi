@@ -26,6 +26,10 @@ The current agent-run preview consumes repository source from the primary checko
 
 For agent-run tests set `TMPDIR` to an owned external-SSD artifact directory. Do not interpret a successful build as browser verification. This documentation pass does not rerun tests or a build; the existing records are [review](review.md), [devlog](devlog.md) and [visual QA](../design-qa.md).
 
+## Origin access
+
+Repository plan discovery now requires Git on the host PATH and noninteractive access to each configured origin. Every refresh fetches origin's advertised default-branch HEAD; the displayed plans use that pinned commit. Local main and working-tree plans do not select repository results. Failed origins are omitted and warned about, without cached/local fallback. The UI refreshes at startup, manually, on focus/visibility return and every minute while visible. Standalone non-Git files and explicit imports remain local inputs. Local code analysis still requires matching plan bytes.
+
 ## Expected data behavior
 
 The initial view is a visibly labeled sample. Pick a local project, plan and epic to explore real records. The project picker favors the first nonempty plan. Refresh starts a fresh scan and keeps imported projects in memory, although other selection state may be reset when changing project. Reload clears imports and returns to the sample. There is no continuous file watcher for plan records, database or write-back.
@@ -36,7 +40,7 @@ The scanner looks for root `plan.md`, `docs/plan.md` and immediate Markdown file
 | --- | --- | --- |
 | Repository depth | 3 edges below the scan root | Deeper projects are not visited; no dedicated depth-limit warning |
 | Eligible directory entries | 12,000 | Discovery stops and returns a top-level warning |
-| Split files per project | 120 | Further split files are skipped; top-level warning |
+| Split files per project | 256 | Further split files are skipped; top-level warning |
 | Discovered plan size | 1,000,000 bytes | File skipped; top-level warning |
 | Browser file import size | 2,000,000 bytes | File skipped with a toast |
 | Paste length | 2,000,000 text characters | Textarea input limit; this is not the file byte limit |

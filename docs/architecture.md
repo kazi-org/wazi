@@ -1,6 +1,6 @@
 # Wazi architecture
 
-Wazi is a local, read-only plan viewer. Markdown files remain the source of truth. The browser receives parsed task records; it does not save changes back to a plan, and there is no database or remote ingestion path in this prototype. The boundaries and behavior below are derived from the current source, rather than promises about future behavior.
+Wazi is a local, read-only plan viewer. Markdown files remain the source of truth. The browser receives parsed task records; it does not save changes back to a plan, and repository plans are now fetched from origin's advertised default-branch HEAD. Standalone files and imports remain local inputs; no database is required. The boundaries and behavior below are derived from the current source, rather than promises about future behavior.
 
 ## Runtime shape
 
@@ -13,7 +13,8 @@ flowchart LR
     Browser[React application]
     Static[Built static assets]
     ThreeCheckout[Configured Three.js checkout]
-    Plans -->|read only| Scanner
+    Origin[Configured Git origin] -->|fetch default HEAD| Scanner
+    Plans -->|standalone files only| Scanner
     Dev -->|GET /api/plans| Scanner
     Scanner -->|JSON| Browser
     Browser -->|import text or file| Browser
@@ -22,7 +23,7 @@ flowchart LR
   end
 ```
 
-The development server binds to loopback. Its Vite middleware implements `GET /api/plans`; it checks the request method, host, and cross-site/origin headers before scanning files. The response is JSON with `projects`, `warnings`, and `scannedAt`, and is marked `no-store`. It does not validate the full response schema. An exception escaping the route returns HTTP 500 with a generic import suggestion. Individual file failures ordinarily produce a successful response with warnings; discovery-directory failures can be skipped silently. The browser calls this endpoint on mount and when Refresh is clicked. See [vite.config.mjs](../vite.config.mjs#L8) and [App.jsx](../src/App.jsx#L24).
+The development server binds to loopback. Its Vite middleware implements `GET /api/plans`; it checks the request method, host, and cross-site/origin headers before scanning files. The response is JSON with `projects`, `warnings`, and `scannedAt`, and is marked `no-store`. It does not validate the full response schema. An exception escaping the route returns HTTP 500 with a generic import suggestion. Individual file failures ordinarily produce a successful response with warnings; discovery-directory failures can be skipped silently. The browser calls this endpoint on mount, manual refresh, focus/visibility return and every minute while visible. Repository fetch failures omit the project without a local/cached fallback. See [vite.config.mjs](../vite.config.mjs#L8) and [App.jsx](../src/App.jsx#L24).
 
 The API exists in Vite's development-server middleware. `vite build` emits static assets under `dist/client`; a static build has no plan-reading endpoint, so it starts with the labeled example plan and supports browser-side Markdown imports. Build and preview do not add a server-side data service. This follows from the `configureServer` middleware and the build output configuration in [vite.config.mjs](../vite.config.mjs#L8).
 

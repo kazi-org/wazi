@@ -50,3 +50,13 @@ export function aggregatePlanEpics(plans, selectedPlanId = 'all') {
     planLabel: plan.path ? plan.title + ' · ' + plan.path.split('/').slice(-2).join('/') : plan.title,
   })));
 }
+
+/** Keep refresh selections within the remaining source plans and records. */
+export function reconcilePlanSelection(plans, {planId = 'all', epic = 'all', selected = null}) {
+  if (planId !== 'all' && !plans.some(plan => plan.id === planId)) {
+    return {planId: 'all', epic: 'all', selected: null};
+  }
+  if (epic !== 'all' && !aggregatePlanEpics(plans, planId).some(item => item.id === epic)) epic = 'all';
+  if (selected && !aggregatePlanTasks(plans, planId).some(task => task.id === selected)) selected = null;
+  return {planId, epic, selected};
+}

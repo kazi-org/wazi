@@ -53,3 +53,15 @@ test('all-plan aggregation retains a 144-task, 15-plan workspace', () => {
   assert.equal(new Set(tasks.map(item => item.id)).size, 144);
   assert.equal(tasks.filter(item => item.authoredId === 'T0.1').length, 15);
 });
+
+
+test('refresh clears a removed plan scope and stale epic/task selections', async () => {
+  const { reconcilePlanSelection } = await import('../src/aggregate-plans.mjs');
+  const remaining = {id:'remaining',path:'docs/plans/remaining.md',title:'Remaining',epics:[],tasks:[{id:'T2.1',dependencies:[]}]};
+  const selection = reconcilePlanSelection([remaining], {planId:'removed',epic:'E1',selected:'old-task'});
+  assert.deepEqual(selection, {planId:'all',epic:'all',selected:null});
+  assert.equal(aggregatePlanTasks([remaining],selection.planId).length,1);
+  assert.deepEqual(reconcilePlanSelection([remaining],{planId:'remaining',epic:'removed-epic',selected:'old-task'}),{planId:'remaining',epic:'all',selected:null});
+  const valid = {planId:'remaining',epic:'all',selected:qualifiedTaskId(remaining,remaining.tasks[0])};
+  assert.deepEqual(reconcilePlanSelection([remaining],valid),valid);
+});

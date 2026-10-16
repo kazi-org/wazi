@@ -7,7 +7,7 @@ import { ArrowUpRight, ArrowsOut, ArrowsClockwise, Cube, SquaresFour, FolderSimp
 import Space from './Space.jsx';
 import { sampleProject, statusLabel, lanes, laneFor } from './demo.mjs';
 import { parsePlan } from './plan-parser.mjs';
-import { aggregatePlanEpics, aggregatePlanTasks, qualifiedTaskId } from './aggregate-plans.mjs';
+import { aggregatePlanEpics, aggregatePlanTasks, qualifiedTaskId, reconcilePlanSelection } from './aggregate-plans.mjs';
 import { groupTasks, limitTaskGroups, matchesStatusFilter } from './task-groups.mjs';
 import { looksLikePortableJson, parsePortablePlanJSON, portablePlanFromBundle } from './portable-plan.mjs';
 
@@ -36,6 +36,12 @@ export default function App(){
   const plan=project.plans.find(p=>p.id===planId)||project.plans[0];
   const tasks=useMemo(()=>aggregatePlanTasks(project.plans,planId),[project.plans,planId]);
   const epicOptions=useMemo(()=>aggregatePlanEpics(project.plans,planId),[project.plans,planId]);
+  useEffect(()=>{
+    const next=reconcilePlanSelection(project.plans,{planId,epic,selected});
+    if(next.planId!==planId)setPlanId(next.planId);
+    if(next.epic!==epic)setEpic(next.epic);
+    if(next.selected!==selected){setSelected(next.selected);if(!next.selected)setInspectorExpanded(false);}
+  },[project.plans,planId,epic,selected]);
   const filteredTasks=useMemo(()=>tasks.filter(t=>epic==='all'||(planId==='all'?t.epicScopeId===epic:t.authoredEpicId===epic)),[tasks,epic,planId]);
   const matchingTasks=useMemo(()=>filteredTasks.filter(t=>matchesStatusFilter(t,filter)),[filteredTasks,filter]);
   const visibleGroups=useMemo(()=>limitTaskGroups(groupTasks(matchingTasks,grouping),columnLimit,selected),[matchingTasks,grouping,columnLimit,selected]);

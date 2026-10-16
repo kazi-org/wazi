@@ -1,6 +1,6 @@
 # Wazi plan data flow
 
-The plan files and the user's imported Markdown are the only input sources. Both paths use the same parser, but filesystem scanning adds project discovery and cross-plan dependency status. The browser then normalizes task IDs for selection and renders the selected plan. No plan changes are written back.
+Repository plans are fetched from origin's advertised default-branch HEAD and read as commit-pinned blobs; standalone non-Git files and the user's imported Markdown remain local inputs. These paths use the same parser, while scanning adds project discovery and cross-plan dependency status. The browser then normalizes task IDs for selection and renders the selected plan. No plan changes are written back.
 
 ## End-to-end paths
 
@@ -24,7 +24,7 @@ flowchart TD
   Select --> Inspector[Task inspector and task list]
 ```
 
-In development, the browser fetches `/api/plans` at mount and when the user presses Refresh. The server accepts GET only, checks local host and cross-site/origin headers, then calls the scanner. A successful response has this shape:
+In development, the browser fetches `/api/plans` at mount, on manual refresh, on focus/visibility return and every minute while visible. The server accepts GET only, checks local host and cross-site/origin headers, then calls the scanner. A successful response has this shape:
 
 ```json
 {
@@ -56,13 +56,13 @@ For scanned files, the scanner passes a project-qualified absolute source path t
 
 ## Discovery and parse limits
 
-The scanner checks each visited directory for `plan.md`, `docs/plan.md`, and direct Markdown files in `docs/plans/`. It stops descending when it reaches a Git root or finds any supported plan file, including in a non-Git directory. It also skips hidden, dependency, generated, temporary, and recognized worktree directories, and prevents revisiting the same real path. Discovery is bounded to depth 3 and 12,000 counted eligible directory entries; it indexes at most 120 split plans per repository and skips individual files larger than 1,000,000 bytes. It returns warnings when repository traversal or split-plan indexing hits a cap, a plan is too large, a plan cannot be read, or an unexpected scan exception escapes discovery. Directory/realpath failures, including an unreadable or missing scan root, can instead return an empty result silently. See [plans.mjs](../scripts/plans.mjs#L9), [plans.mjs](../scripts/plans.mjs#L32), and [plans.mjs](../scripts/plans.mjs#L115).
+The scanner checks each visited directory for `plan.md`, `docs/plan.md`, and direct Markdown files in `docs/plans/`. It stops descending when it reaches a Git root or finds any supported plan file, including in a non-Git directory. It also skips hidden, dependency, generated, temporary, and recognized worktree directories, and prevents revisiting the same real path. Discovery is bounded to depth 3 and 12,000 counted eligible directory entries; it indexes at most 256 split plans per repository and skips individual files larger than 1,000,000 bytes. It returns warnings when repository traversal or split-plan indexing hits a cap, a plan is too large, a plan cannot be read, or an unexpected scan exception escapes discovery. Directory/realpath failures, including an unreadable or missing scan root, can instead return an empty result silently. See [plans.mjs](../scripts/plans.mjs#L9), [plans.mjs](../scripts/plans.mjs#L32), and [plans.mjs](../scripts/plans.mjs#L115).
 
 The parser ignores fenced code blocks and reads Markdown task checkboxes. It recognizes task IDs at the start of task text; headings define plan titles and nearby `E…` headings define epics. Task metadata includes stage, owner, status, dependency aliases (`blocked-by`, `deps`, `dependencies`), and acceptance aliases. A task's source records the plan path and Markdown line. It does not interpret every Markdown convention: unrecognized lines are not tasks, and it does not evaluate acceptance prose. See [plan-parser.mjs](../src/plan-parser.mjs#L129).
 
 ## Status derivation
 
-The shared parser derives status from checkbox and optional status metadata: `[x]` is complete, `[~]` is active, `[-]` is blocked, and `[ ]` defaults to pending unless explicit status is exactly `blocked`, `active`, or `in-progress` (case-insensitive) in the supported syntax. For filesystem scans, a second pass resolves dependencies across all plans in a project using source IDs. A missing ID adds an unresolved-dependency warning to the plan; an incomplete matched dependency changes a non-complete dependent task to blocked. For browser imports, dependencies are checked only against tasks in that one imported plan. Pending imported tasks with a found, incomplete dependency become blocked; unresolved IDs do not produce warnings. These paths differ in scope. Per-plan warnings are included in JSON but the UI notice only displays the first top-level scanner warning. See [plan-parser.mjs](../src/plan-parser.mjs#L163), [plans.mjs](../scripts/plans.mjs#L94), and [App.jsx](../src/App.jsx#L24).
+The shared parser derives status from checkbox and optional status metadata: `[x]` is complete, `[~]` is active, `[-]` is blocked, and `[ ]` defaults to pending unless explicit status is exactly `blocked`, `active`, or `in-progress` (case-insensitive) in the supported syntax. For filesystem scans, a second pass resolves dependencies across all plans in a project using source IDs. A missing ID adds an unresolved-dependency warning to the plan; an incomplete matched dependency changes a non-complete dependent task to blocked. For browser imports, dependencies are checked only against tasks in that one imported plan. Pending imported tasks with a found, incomplete dependency become blocked; unresolved IDs do not produce warnings. These paths differ in scope. Per-plan warnings are included in JSON and the UI notice joins all top-level scanner warnings. See [plan-parser.mjs](../src/plan-parser.mjs#L163), [plans.mjs](../scripts/plans.mjs#L94), and [App.jsx](../src/App.jsx#L24).
 
 ## Selection and display
 
@@ -72,7 +72,7 @@ Three.js draws a dependency connection only when both the task and dependency ar
 
 ## Refresh, imports, and errors
 
-On refresh, the UI replaces scanned projects with the new response while keeping imported projects already in memory. A failed HTTP response, invalid JSON or a non-array `projects` field, or network error leaves the user with the current in-memory state and shows a generic message that local plans are unavailable. If the server returns warnings, the UI shows the first warning as a notice. A server-side scan exception returns a generic HTTP 500 response; individual scanner errors are reported in warnings where possible. See [App.jsx](../src/App.jsx#L24) and [vite.config.mjs](../vite.config.mjs#L17).
+On refresh, the UI replaces scanned projects with the new response while keeping imported projects already in memory. A failed HTTP response, invalid JSON or a non-array `projects` field, or network error removes previous repository results while preserving imports and the sample. An origin fetch failure omits that project without using local/cached plans. All top-level warnings are joined in the notice. Removed plan, epic and task selections are reconciled to remaining records; a removed plan returns the view to All plans. A server-side scan exception returns a generic HTTP 500 response; individual scanner errors are reported in warnings where possible. See [App.jsx](../src/App.jsx#L24) and [vite.config.mjs](../vite.config.mjs#L17).
 
 Imported Markdown goes straight through `parsePlan` in the browser and is added to React state. Files over 2,000,000 bytes are skipped with a notice; decode/read/parse exceptions show an import error. A Markdown document with no recognized task checkboxes is rejected with a stable-ID hint. Imports last only until the page reloads. A static build can still use the bundled example and this import path, while filesystem discovery depends on the Vite development server's local API. The example plan remains explicitly labeled as illustrative sample data. See [App.jsx](../src/App.jsx#L34) and [demo.mjs](../src/demo.mjs#L20).
 
