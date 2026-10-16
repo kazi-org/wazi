@@ -1,7 +1,11 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 import { parsePlan } from '../src/plan-parser.mjs';
 
 export { parsePlan } from '../src/plan-parser.mjs';
@@ -66,7 +70,7 @@ async function discoverRepositories(root) {
     let isGitRoot = false;
     try { isGitRoot = (await fs.stat(gitMarker)).isDirectory() || (await fs.stat(gitMarker)).isFile(); } catch { /* Not a Git repository root. */ }
     const { files: plans, splitCapped } = await findPlanFiles(directory);
-    if (plans.length) repos.push({ path: directory, plans, splitCapped });
+    if (isGitRoot || plans.length) repos.push({ path: directory, plans, splitCapped, isGitRoot });
     // A Git root owns this subtree. Never rediscover docs/plan.md as a project
     // or enumerate the repository's source tree looking for nested plans.
     if (isGitRoot || plans.length) return;
@@ -79,6 +83,48 @@ async function discoverRepositories(root) {
   }
   await walk(root, 0);
   return { repos, capped: entriesSeen >= MAX_ENTRIES };
+}
+
+// Fetch into an invocation-private ref, pin its commit, then read blobs directly.
+// Never check out, pull, reset, or trust a previously cached remote ref.
+async function originPlans(repoPath, signal) {
+  const ref = `refs/wazi/scans/${randomUUID()}`;
+  const git = async (args, maxBuffer = 4_000_000) => {
+    const { stdout } = await execFileAsync('git', ['-C', repoPath, ...args], {
+      encoding: 'utf8', maxBuffer, timeout: 12_000, signal,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never',
+        GIT_SSH_COMMAND: 'ssh -oBatchMode=yes -oConnectTimeout=5' },
+    });
+    return stdout;
+  };
+  try {
+    await git(['fetch', '--quiet', '--no-tags', '--no-recurse-submodules', '--no-write-fetch-head',
+      'origin', `+HEAD:${ref}`]);
+    const revision = (await git(['rev-parse', '--verify', `${ref}^{commit}`])).trim();
+    const tree = await git(['ls-tree', '-r', '-z', revision, '--', 'plan.md', 'docs/plan.md', 'docs/plans/']);
+    const entries = tree.split('\0').filter(Boolean).flatMap(record => {
+      const match = /^(100644|100755) blob ([a-f0-9]+)\t([\s\S]+)$/.exec(record);
+      if (!match) return []; // Symlinks and submodules are not plan files.
+      const [, , oid, name] = match;
+      return name === 'plan.md' || name === 'docs/plan.md' || /^docs\/plans\/[^/]+\.md$/i.test(name) ? [{ name, oid }] : [];
+    }).sort((a, b) => a.name.localeCompare(b.name));
+    const split = entries.filter(e => e.name.startsWith('docs/plans/'));
+    const files = entries.filter(e => !e.name.startsWith('docs/plans/') || split.indexOf(e) < MAX_SPLIT_PLANS);
+    const contents = [];
+    for (const file of files) {
+      const size = Number((await git(['cat-file', '-s', file.oid])).trim());
+      if (size > MAX_FILE_BYTES) { contents.push({ relative: file.name, oversized: true }); continue; }
+      // Buffer output preserves the exact bytes used for the source digest.
+      const { stdout } = await execFileAsync('git', ['-C', repoPath, 'cat-file', 'blob', file.oid], {
+        encoding: 'buffer', maxBuffer: MAX_FILE_BYTES, timeout: 5000, signal,
+      });
+      contents.push({ relative: file.name, sourceBytes: stdout });
+    }
+    return { contents, revision, fetchedAt: new Date().toISOString(), splitCapped: split.length > MAX_SPLIT_PLANS };
+  } finally {
+    // Do not let an expired scan deadline prevent removal of our private ref.
+    await execFileAsync('git', ['-C', repoPath, 'update-ref', '-d', ref], { timeout: 5000 }).catch(() => {});
+  }
 }
 
 function repoMapNames(repoMap) {
@@ -128,23 +174,43 @@ export async function scanPlans({ root = path.join(os.homedir(), 'Code'), repoMa
   }
   if (discovery.capped) warnings.push(`Repository discovery stopped at its ${MAX_ENTRIES} entry limit.`);
 
-  for (const repo of discovery.repos.sort((a, b) => a.path.localeCompare(b.path))) {
+  const signal = AbortSignal.timeout(60_000);
+  const queue = discovery.repos.sort((a, b) => a.path.localeCompare(b.path));
+  async function readRepository(repo) {
     const name = names.get(path.resolve(repo.path)) || path.basename(repo.path) || repo.path;
     const plans = [];
-    if (repo.splitCapped) warnings.push(`Plan discovery for ${name} is incomplete: only the first ${MAX_SPLIT_PLANS} Markdown files in docs/plans/ were indexed; additional files were skipped. Project totals exclude skipped files.`);
-    for (const file of repo.plans) {
-      const relative = relativePath(repo.path, file);
+    let contents, sourceRevision, fetchedAt;
+    let splitCapped = repo.splitCapped;
+    if (repo.isGitRoot) {
       try {
-        const stat = await fs.stat(file);
-        if (stat.size > MAX_FILE_BYTES) {
+        const remote = await originPlans(repo.path, signal);
+        contents = remote.contents;
+        sourceRevision = remote.revision;
+        fetchedAt = remote.fetchedAt;
+        splitCapped = remote.splitCapped;
+      } catch {
+        // Git stderr may contain credential-bearing URLs. Report only safe context.
+        warnings.push(`Could not refresh origin for ${name}. No local or cached plans were used. Check origin access and refresh again.`);
+        return;
+      }
+    } else {
+      contents = repo.plans.map(file => ({ relative: relativePath(repo.path, file), file }));
+    }
+    if (splitCapped) warnings.push(`Plan discovery for ${name} is incomplete: only the first ${MAX_SPLIT_PLANS} Markdown files in docs/plans/ were indexed; additional files were skipped. Project totals exclude skipped files.`);
+    for (const entry of contents) {
+      const { relative } = entry;
+      try {
+        if (entry.oversized || (entry.file && (await fs.stat(entry.file)).size > MAX_FILE_BYTES)) {
           warnings.push(`Skipped oversized plan ${name}/${relative} (limit ${MAX_FILE_BYTES} bytes).`);
           continue;
         }
-        const sourceBytes = await fs.readFile(file);
+        const sourceBytes = entry.sourceBytes || await fs.readFile(entry.file);
         const markdown = sourceBytes.toString('utf8');
         // Pass a project-qualified path into the shared parser to keep IDs unique across repos.
         const parsed = parsePlan(markdown, { path: `${path.resolve(repo.path)}/${relative}`, project: name });
         parsed.sourceDigest = `sha256:${createHash('sha256').update(sourceBytes).digest('hex')}`;
+        parsed.sourceType = repo.isGitRoot ? 'origin' : 'local';
+        if (sourceRevision) parsed.sourceRevision = sourceRevision;
         plans.push(parsed);
         plans.at(-1).path = relative;
         plans.at(-1).project = name;
@@ -152,10 +218,15 @@ export async function scanPlans({ root = path.join(os.homedir(), 'Code'), repoMa
         warnings.push(`Could not read plan ${name}/${relative}: ${error.message}`);
       }
     }
-    if (!plans.length) continue;
+    if (!plans.length) return;
     applyDependencyStatus(plans);
-    projects.push({ id: stableId('project', path.resolve(repo.path)), name, plans });
+    projects.push({ id: stableId('project', path.resolve(repo.path)), name, plans, sourceType: repo.isGitRoot ? 'origin' : 'local', sourceRevision, fetchedAt });
   }
+  // Bound network concurrency and the overall scan; one inaccessible origin
+  // cannot serially stall every other project.
+  await Promise.all(Array.from({ length: Math.min(8, queue.length) }, async () => {
+    while (queue.length) await readRepository(queue.shift());
+  }));
   projects.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   return { projects, warnings, scannedAt: new Date().toISOString() };
 }

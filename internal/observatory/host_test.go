@@ -135,9 +135,7 @@ func TestTaskIdentityAndBindingsRefreshAfterPlanEdit(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(filepath.Join(repo, ".git"), 0700); err != nil {
-		t.Fatal(err)
-	}
+	// Standalone plan fixture: repository freshness is covered with real origins.
 	if err := os.Mkdir(filepath.Join(repo, "src"), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +238,7 @@ func TestRevokeBindingPreservesOtherLinksAndSource(t *testing.T) {
 	}
 	root := t.TempDir()
 	repo := filepath.Join(root, "project")
-	for _, dir := range []string{filepath.Join(repo, "docs"), filepath.Join(repo, "src"), filepath.Join(repo, ".git")} {
+	for _, dir := range []string{filepath.Join(repo, "docs"), filepath.Join(repo, "src")} {
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			t.Fatal(err)
 		}
@@ -379,9 +377,7 @@ func TestSnapshotRejectsPlanEditedAfterParserRead(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(repo, "docs"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(filepath.Join(repo, ".git"), 0700); err != nil {
-		t.Fatal(err)
-	}
+	// Standalone plan fixture: repository freshness is covered with real origins.
 	planPath := filepath.Join(repo, "docs", "plan.md")
 	parsedBytes := []byte("# Race plan\n\n- [ ] T1.1 Parsed task\n")
 	changedBytes := []byte("# Race plan\n\n- [ ] T1.2 Changed task\n")
@@ -487,5 +483,59 @@ func TestHostRequiresLoopbackAndSessionCapabilityForWrites(t *testing.T) {
 	denied.Result().Body.Close()
 	if denied.Code != http.StatusForbidden {
 		t.Fatalf("write without capability status %d", denied.Code)
+	}
+}
+
+func TestOriginPlanDiscoveryRejectsMismatchedLocalAnalysis(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node unavailable")
+	}
+	root := t.TempDir()
+	repo := filepath.Join(root, "project")
+	upstream := t.TempDir()
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git(upstream, "init", "-b", "main")
+	git(upstream, "config", "user.name", "Fixture")
+	git(upstream, "config", "user.email", "fixture@example.invalid")
+	planPath := filepath.Join(upstream, "plan.md")
+	if err := os.WriteFile(planPath, []byte("# Old\n- [ ] T1.1 Old task\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(upstream, "add", ".")
+	git(upstream, "commit", "-m", "Initial")
+	git(root, "clone", upstream, repo)
+	latest := []byte("# Latest\n- [x] T1.1 Latest origin task\n")
+	if err := os.WriteFile(planPath, latest, 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(upstream, "add", ".")
+	git(upstream, "commit", "-m", "Update")
+	bridge, err := filepath.Abs("../../scripts/host-bridge.mjs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := New(root, t.TempDir(), "node", bridge)
+	scan, err := svc.Discover(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scan.Projects) != 1 || scan.Projects[0].Plans[0].Tasks[0].Title != "Latest origin task" {
+		t.Fatalf("remote scan: %+v", scan)
+	}
+	if _, err := svc.Snapshot(context.Background(), scan.Projects[0].ID); err == nil {
+		t.Fatal("accepted local code analysis against a different plan")
+	}
+	if err := os.WriteFile(filepath.Join(repo, "plan.md"), latest, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Snapshot(context.Background(), scan.Projects[0].ID); err != nil {
+		t.Fatalf("matching local content rejected: %v", err)
 	}
 }

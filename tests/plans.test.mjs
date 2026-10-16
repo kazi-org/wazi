@@ -213,13 +213,13 @@ test('rejects duplicate portable JSON object keys at every depth, including esca
   assert.throws(() => parsePortablePlanJSON(`[${'0,'.repeat(200_000)}0]`), /200,000 node limit/);
 });
 
-test('scanner stops at git roots and does not invent projects for docs directories', async (t) => {
+test('scanner stops at standalone plan roots and does not invent docs projects', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'wazi-plan-discovery-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const repo = path.join(root, 'org', 'actual-repo');
   const worktree = path.join(root, 'org', 'actual-repo-wt-task-T3.4');
   const nested = path.join(repo, 'docs', 'examples', 'nested');
-  await fs.mkdir(path.join(repo, '.git'), { recursive: true });
+  // This fixture is a standalone plan directory; origin behavior uses real Git below.
   await fs.mkdir(path.join(repo, 'docs'), { recursive: true });
   await fs.mkdir(path.join(nested, 'docs'), { recursive: true });
   await fs.mkdir(path.join(worktree, 'docs'), { recursive: true });
@@ -266,4 +266,80 @@ test('split discovery indexes 256 files and warns only when additional files are
   const capped = await scanPlans({root});
   assert.equal(capped.projects[0].plans.length, 256);
   assert.ok(capped.warnings.some(w => w.includes('first 256 Markdown files')));
+});
+
+// Real origins exercise fetch freshness independently of local branches/index.
+async function originFixture(t) {
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const run = promisify(execFile);
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'wazi-origin-'));
+  t.after(() => fs.rm(temp, { recursive: true, force: true }));
+  const root = path.join(temp, 'workspace'), repo = path.join(root, 'project');
+  const upstream = path.join(temp, 'upstream');
+  await fs.mkdir(root);
+  const git = async (dir, ...args) => (await run('git', ['-C', dir, ...args])).stdout.trim();
+  await fs.mkdir(upstream);
+  await git(upstream, 'init', '-b', 'trunk');
+  await git(upstream, 'config', 'user.name', 'Fixture');
+  await git(upstream, 'config', 'user.email', 'fixture@example.invalid');
+  await fs.mkdir(path.join(upstream, 'docs', 'plans'), { recursive: true });
+  const plan = path.join(upstream, 'docs', 'plan.md');
+  await fs.writeFile(plan, '# Old\n- [ ] T1.1 Old remote task\n');
+  await git(upstream, 'add', '.');
+  await git(upstream, 'commit', '-m', 'Initial');
+  await run('git', ['clone', upstream, repo]);
+  return { root, repo, upstream, plan, git };
+}
+
+test('origin default branch wins over stale checkout, feature branch and dirty files', async t => {
+  const { root, repo, upstream, plan, git } = await originFixture(t);
+  const before = await git(repo, 'rev-parse', 'HEAD');
+  await git(repo, 'switch', '-c', 'feature');
+  const localBytes = '# Dirty local\n- [ ] T9.9 Must never appear\n';
+  await fs.writeFile(path.join(repo, 'docs', 'plan.md'), localBytes);
+  await fs.writeFile(plan, '# Latest remote\n- [x] T1.1 Latest task\n');
+  await fs.writeFile(path.join(upstream, 'docs', 'plans', 'new.md'), '# New remote plan\n- [ ] T2.1 New task\n');
+  await git(upstream, 'add', '.');
+  await git(upstream, 'commit', '-m', 'Remote update');
+  const revision = await git(upstream, 'rev-parse', 'HEAD');
+  const scan = await scanPlans({ root });
+  assert.deepEqual(scan.warnings, []);
+  assert.equal(scan.projects[0].sourceRevision, revision);
+  assert.equal(scan.projects[0].sourceType, 'origin');
+  assert.equal(scan.projects[0].plans.length, 2);
+  const displayed = scan.projects[0].plans.find(p => p.path === 'docs/plan.md');
+  assert.equal(displayed.tasks[0].title, 'Latest task');
+  assert.equal(displayed.tasks[0].status, 'complete');
+  assert.equal(displayed.sourceRevision, revision);
+  assert.equal(await git(repo, 'rev-parse', 'HEAD'), before);
+  assert.equal(await git(repo, 'branch', '--show-current'), 'feature');
+  assert.equal(await fs.readFile(path.join(repo, 'docs', 'plan.md'), 'utf8'), localBytes);
+  assert.equal(await git(repo, 'for-each-ref', 'refs/wazi/scans/'), '');
+  // A later refresh must reflect a remote deletion, with no local fallback.
+  await fs.rm(plan);
+  await git(upstream, 'add', '-A');
+  await git(upstream, 'commit', '-m', 'Remove root plan');
+  const next = await scanPlans({ root });
+  assert.deepEqual(next.projects[0].plans.map(p => p.path), ['docs/plans/new.md']);
+});
+
+test('failed origin refresh refuses cached and dirty local plans', async t => {
+  const { root, repo, git } = await originFixture(t);
+  assert.equal((await scanPlans({ root })).projects.length, 1);
+  await git(repo, 'remote', 'set-url', 'origin', path.join(root, 'unavailable-origin'));
+  const failed = await scanPlans({ root });
+  assert.deepEqual(failed.projects, []);
+  assert.match(failed.warnings.join('\n'), /Could not refresh origin.*No local or cached plans/);
+  await git(repo, 'remote', 'remove', 'origin');
+  assert.equal((await scanPlans({ root })).projects.length, 0);
+});
+
+test('discovers remote-only plans even when no plan exists in the local checkout', async t => {
+  const { root, repo, upstream, git } = await originFixture(t);
+  await fs.rm(path.join(repo, 'docs'), { recursive: true });
+  const scan = await scanPlans({ root });
+  assert.equal(scan.projects.length, 1);
+  assert.equal(scan.projects[0].sourceRevision, await git(upstream, 'rev-parse', 'HEAD'));
+  assert.equal(scan.projects[0].plans[0].tasks[0].title, 'Old remote task');
 });
