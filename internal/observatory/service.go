@@ -207,9 +207,28 @@ func (b *boundedBuffer) Write(p []byte) (int, error) {
 	return n, nil
 }
 func (s *Service) Discover(ctx context.Context) (Scan, error) {
+	return s.discover(ctx, "")
+}
+
+// DiscoverOrigin refreshes one selected project; ordinary discovery stays offline.
+func (s *Service) DiscoverOrigin(ctx context.Context, projectID string) (Scan, error) {
+	if len(projectID) != 24 || !strings.HasPrefix(projectID, "project-") {
+		return Scan{}, errors.New("invalid project ID")
+	}
+	if _, err := hex.DecodeString(projectID[8:]); err != nil {
+		return Scan{}, errors.New("invalid project ID")
+	}
+	return s.discover(ctx, projectID)
+}
+
+func (s *Service) discover(ctx context.Context, projectID string) (Scan, error) {
 	ctx, cancel := context.WithTimeout(ctx, 75*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, s.Node, s.Bridge, s.Root)
+	args := []string{s.Bridge, s.Root}
+	if projectID != "" {
+		args = append(args, "origin", projectID)
+	}
+	cmd := exec.CommandContext(ctx, s.Node, args...)
 	var out, stderr boundedBuffer
 	out.limit, stderr.limit = 16<<20, 4096
 	cmd.Stdout = &out
@@ -244,6 +263,16 @@ func (s *Service) Discover(ctx context.Context) (Scan, error) {
 			}
 		}
 	}
+	// Origin results are display snapshots, not replacements for local analysis state.
+	if projectID != "" {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for i := range got.Projects {
+			_, got.Projects[i].Hosted = s.projects[got.Projects[i].ID]
+		}
+		return got, nil
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	registryPath := filepath.Join(s.DataDir, "repositories.json")

@@ -16,7 +16,10 @@ const planApi = () => ({
       res.setHeader('Cache-Control', 'no-store');
       try {
         const { scanPlans } = await import(pathToFileURL(path.join(process.cwd(), 'scripts/plans.mjs')).href);
-        res.end(JSON.stringify(await scanPlans({ root: process.env.WAZI_PLAN_ROOT || path.join(homedir(), 'Code') })));
+        const query = new URL(req.url, 'http://localhost').searchParams;
+        const source = query.get('source') || 'local', projectId = query.get('projectId');
+        if (!['local','origin'].includes(source) || (source === 'origin' && !/^project-[a-f0-9]{16}$/.test(projectId || ''))) { res.statusCode = 400; res.end(); return; }
+        res.end(JSON.stringify(await scanPlans({ root: process.env.WAZI_PLAN_ROOT || path.join(homedir(), 'Code'), source, projectId })));
       } catch (err) { res.statusCode = 500; res.end(JSON.stringify({error: 'Local plans could not be read. Import a Markdown plan instead.'})); console.error(err.message); }
     });
   },

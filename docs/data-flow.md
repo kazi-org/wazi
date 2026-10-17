@@ -1,6 +1,6 @@
 # Wazi plan data flow
 
-Repository plans are fetched from origin's advertised default-branch HEAD and read as commit-pinned blobs; standalone non-Git files and the user's imported Markdown remain local inputs. These paths use the same parser, while scanning adds project discovery and cross-plan dependency status. The browser then normalizes task IDs for selection and renders the selected plan. No plan changes are written back.
+Local checkout plans load first with offline discovery. Selecting a repository triggers a scoped background fetch from origin's advertised default-branch HEAD and parses commit-pinned blobs. Local checkout snapshots are retained separately so origin failures or project revisits can show local plans. Standalone files and imported Markdown remain local inputs. The shared parser derives task records without writing source plans.
 
 ## End-to-end paths
 
@@ -72,7 +72,7 @@ Three.js draws a dependency connection only when both the task and dependency ar
 
 ## Refresh, imports, and errors
 
-On refresh, the UI replaces scanned projects with the new response while keeping imported projects already in memory. A failed HTTP response, invalid JSON or a non-array `projects` field, or network error removes previous repository results while preserving imports and the sample. An origin fetch failure omits that project without using local/cached plans. All top-level warnings are joined in the notice. Removed plan, epic and task selections are reconciled to remaining records; a removed plan returns the view to All plans. A server-side scan exception returns a generic HTTP 500 response; individual scanner errors are reported in warnings where possible. See [App.jsx](../src/App.jsx#L24) and [vite.config.mjs](../vite.config.mjs#L17).
+On refresh, the UI replaces scanned projects with the new response while keeping imported projects already in memory. A failed HTTP response, invalid JSON or a non-array `projects` field, or network error removes previous repository results while preserving imports and the sample. An origin fetch failure keeps the local checkout snapshot visible. All top-level warnings are joined in the notice. Removed plan, epic and task selections are reconciled to remaining records; a removed plan returns the view to All plans. A server-side scan exception returns a generic HTTP 500 response; individual scanner errors are reported in warnings where possible. See [App.jsx](../src/App.jsx#L24) and [vite.config.mjs](../vite.config.mjs#L17).
 
 Imported Markdown goes straight through `parsePlan` in the browser and is added to React state. Files over 2,000,000 bytes are skipped with a notice; decode/read/parse exceptions show an import error. A Markdown document with no recognized task checkboxes is rejected with a stable-ID hint. Imports last only until the page reloads. A static build can still use the bundled example and this import path, while filesystem discovery depends on the Vite development server's local API. The example plan remains explicitly labeled as illustrative sample data. See [App.jsx](../src/App.jsx#L34) and [demo.mjs](../src/demo.mjs#L20).
 

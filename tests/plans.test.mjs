@@ -292,6 +292,11 @@ async function originFixture(t) {
   return { root, repo, upstream, plan, git };
 }
 
+async function scanOrigin({root}) {
+  const local = await scanPlans({root});
+  return scanPlans({root, source:'origin', projectId:local.projects[0].id});
+}
+
 test('origin default branch wins over stale checkout, feature branch and dirty files', async t => {
   const { root, repo, upstream, plan, git } = await originFixture(t);
   const before = await git(repo, 'rev-parse', 'HEAD');
@@ -303,7 +308,7 @@ test('origin default branch wins over stale checkout, feature branch and dirty f
   await git(upstream, 'add', '.');
   await git(upstream, 'commit', '-m', 'Remote update');
   const revision = await git(upstream, 'rev-parse', 'HEAD');
-  const scan = await scanPlans({ root });
+  const scan = await scanOrigin({ root });
   assert.deepEqual(scan.warnings, []);
   assert.equal(scan.projects[0].sourceRevision, revision);
   assert.equal(scan.projects[0].sourceType, 'origin');
@@ -320,26 +325,58 @@ test('origin default branch wins over stale checkout, feature branch and dirty f
   await fs.rm(plan);
   await git(upstream, 'add', '-A');
   await git(upstream, 'commit', '-m', 'Remove root plan');
-  const next = await scanPlans({ root });
+  const next = await scanOrigin({ root });
   assert.deepEqual(next.projects[0].plans.map(p => p.path), ['docs/plans/new.md']);
 });
 
 test('failed origin refresh refuses cached and dirty local plans', async t => {
   const { root, repo, git } = await originFixture(t);
-  assert.equal((await scanPlans({ root })).projects.length, 1);
+  assert.equal((await scanOrigin({ root })).projects.length, 1);
   await git(repo, 'remote', 'set-url', 'origin', path.join(root, 'unavailable-origin'));
-  const failed = await scanPlans({ root });
+  const failed = await scanOrigin({ root });
   assert.deepEqual(failed.projects, []);
-  assert.match(failed.warnings.join('\n'), /Could not refresh origin.*No local or cached plans/);
+  assert.match(failed.warnings.join('\n'), /Could not refresh origin.*Showing local checkout plans/);
   await git(repo, 'remote', 'remove', 'origin');
-  assert.equal((await scanPlans({ root })).projects.length, 0);
+  assert.equal((await scanOrigin({ root })).projects.length, 0);
 });
 
 test('discovers remote-only plans even when no plan exists in the local checkout', async t => {
   const { root, repo, upstream, git } = await originFixture(t);
   await fs.rm(path.join(repo, 'docs'), { recursive: true });
-  const scan = await scanPlans({ root });
+  const scan = await scanOrigin({ root });
   assert.equal(scan.projects.length, 1);
   assert.equal(scan.projects[0].sourceRevision, await git(upstream, 'rev-parse', 'HEAD'));
   assert.equal(scan.projects[0].plans[0].tasks[0].title, 'Old remote task');
+});
+
+
+test('local discovery shows checkout plans without Git or origin access', async t => {
+  const { root, repo, git } = await originFixture(t);
+  await git(repo, 'remote', 'set-url', 'origin', '/unavailable-origin');
+  await fs.writeFile(path.join(repo,'docs/plan.md'),'# Local checkout\n- [ ] T9.1 Immediate local task\n');
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const script = `import {scanPlans} from ${JSON.stringify(new URL('../scripts/plans.mjs', import.meta.url).href)};process.stdout.write(JSON.stringify(await scanPlans({root:${JSON.stringify(root)}})));`;
+  const { stdout } = await promisify(execFile)(process.execPath,['--input-type=module','-e',script],{env:{...process.env,PATH:'/no-git-available'}});
+  const local=JSON.parse(stdout);
+  assert.equal(local.projects[0].plans[0].tasks[0].title,'Immediate local task');
+  assert.equal(local.projects[0].sourceType,'local');
+  assert.equal(local.projects[0].originEligible,true);
+  assert.deepEqual(local.warnings,[]);
+  const remote=await scanOrigin({root});
+  assert.equal(remote.projects.length,0);
+  assert.equal((await scanPlans({root})).projects[0].plans[0].tasks[0].title,'Immediate local task');
+});
+
+test('origin refresh requires an exact project ID and scopes network work to it', async t => {
+  const { root, repo } = await originFixture(t);
+  await assert.rejects(scanPlans({root,source:'origin'}),/requires a project ID/);
+  const other=path.join(root,'unselected');
+  await fs.mkdir(path.join(other,'.git'),{recursive:true});
+  await fs.writeFile(path.join(other,'plan.md'),'# Unselected\n- [ ] T4.1 Local only\n');
+  const local=await scanPlans({root});
+  const selected=local.projects.find(p=>p.name===path.basename(repo));
+  const remote=await scanPlans({root,source:'origin',projectId:selected.id});
+  assert.deepEqual(remote.projects.map(p=>p.id),[selected.id]);
+  assert.deepEqual(remote.warnings,[]);
 });

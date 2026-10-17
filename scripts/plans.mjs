@@ -163,7 +163,9 @@ function applyDependencyStatus(plans) {
 }
 
 /** Read plans under root (default ~/Code), returning bounded task records. */
-export async function scanPlans({ root = path.join(os.homedir(), 'Code'), repoMap } = {}) {
+export async function scanPlans({ root = path.join(os.homedir(), 'Code'), repoMap, source = 'local', projectId } = {}) {
+  if (!['local', 'origin'].includes(source)) throw new Error('Unsupported plan source');
+  if (source === 'origin' && !/^project-[a-f0-9]{16}$/.test(projectId || '')) throw new Error('Origin refresh requires a project ID');
   const absoluteRoot = path.resolve(root);
   const warnings = [];
   const projects = [];
@@ -175,13 +177,14 @@ export async function scanPlans({ root = path.join(os.homedir(), 'Code'), repoMa
   if (discovery.capped) warnings.push(`Repository discovery stopped at its ${MAX_ENTRIES} entry limit.`);
 
   const signal = AbortSignal.timeout(60_000);
-  const queue = discovery.repos.sort((a, b) => a.path.localeCompare(b.path));
+  const queue = discovery.repos.filter(repo => source !== 'origin' || stableId('project', path.resolve(repo.path)) === projectId).sort((a, b) => a.path.localeCompare(b.path));
   async function readRepository(repo) {
     const name = names.get(path.resolve(repo.path)) || path.basename(repo.path) || repo.path;
     const plans = [];
     let contents, sourceRevision, fetchedAt;
     let splitCapped = repo.splitCapped;
-    if (repo.isGitRoot) {
+    const fromOrigin = source === 'origin' && repo.isGitRoot;
+    if (fromOrigin) {
       try {
         const remote = await originPlans(repo.path, signal);
         contents = remote.contents;
@@ -190,7 +193,7 @@ export async function scanPlans({ root = path.join(os.homedir(), 'Code'), repoMa
         splitCapped = remote.splitCapped;
       } catch {
         // Git stderr may contain credential-bearing URLs. Report only safe context.
-        warnings.push(`Could not refresh origin for ${name}. No local or cached plans were used. Check origin access and refresh again.`);
+        warnings.push(`Could not refresh origin for ${name}. Showing local checkout plans. Check origin access and refresh again.`);
         return;
       }
     } else {
@@ -209,7 +212,7 @@ export async function scanPlans({ root = path.join(os.homedir(), 'Code'), repoMa
         // Pass a project-qualified path into the shared parser to keep IDs unique across repos.
         const parsed = parsePlan(markdown, { path: `${path.resolve(repo.path)}/${relative}`, project: name });
         parsed.sourceDigest = `sha256:${createHash('sha256').update(sourceBytes).digest('hex')}`;
-        parsed.sourceType = repo.isGitRoot ? 'origin' : 'local';
+        parsed.sourceType = fromOrigin ? 'origin' : 'local';
         if (sourceRevision) parsed.sourceRevision = sourceRevision;
         plans.push(parsed);
         plans.at(-1).path = relative;
@@ -218,9 +221,9 @@ export async function scanPlans({ root = path.join(os.homedir(), 'Code'), repoMa
         warnings.push(`Could not read plan ${name}/${relative}: ${error.message}`);
       }
     }
-    if (!plans.length) return;
+    if (!plans.length && !(repo.isGitRoot && source === 'local')) return;
     applyDependencyStatus(plans);
-    projects.push({ id: stableId('project', path.resolve(repo.path)), name, plans, sourceType: repo.isGitRoot ? 'origin' : 'local', sourceRevision, fetchedAt });
+    projects.push({ id: stableId('project', path.resolve(repo.path)), name, plans, originEligible: repo.isGitRoot, sourceType: fromOrigin ? 'origin' : 'local', sourceRevision, fetchedAt });
   }
   // Bound network concurrency and the overall scan; one inaccessible origin
   // cannot serially stall every other project.

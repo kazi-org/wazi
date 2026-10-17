@@ -59,7 +59,22 @@ func (h *Host) serve(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "method not allowed", 405)
 			return
 		}
-		scan, e := h.Service.Discover(r.Context())
+		var scan Scan
+		var e error
+		source := r.URL.Query().Get("source")
+		if source == "origin" {
+			id := r.URL.Query().Get("projectId")
+			if len(id) != 24 || !strings.HasPrefix(id, "project-") || strings.Trim(id[8:], "0123456789abcdef") != "" {
+				http.Error(w, "origin refresh requires a valid project ID", 400)
+				return
+			}
+			scan, e = h.Service.DiscoverOrigin(r.Context(), id)
+		} else if source == "" || source == "local" {
+			scan, e = h.Service.Discover(r.Context())
+		} else {
+			http.Error(w, "unsupported plan source", 400)
+			return
+		}
 		if e != nil {
 			http.Error(w, "local plan discovery failed", 500)
 			return

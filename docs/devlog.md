@@ -314,3 +314,9 @@ E17 filter-selection follow-up: changing status clears a nonmatching selection a
 ### Review correction for origin refresh
 
 Independent review of db0a02d requested P2 correction: deletion of the selected split plan left a dead plan ID and an empty canvas. Refresh now reconciles missing plan, epic and task selections; a removed plan resets to All plans and clears its old inspector. Added a regression covering deletion down to a single remaining plan, missing epic/task, and retention of valid selection. Updated README and runtime/data-flow documentation for origin access and refresh/failure behavior. Native SSH-agent-backed origin access remains unqualified; disposable local origins establish fetch semantics only.
+
+## 2026-10-17 — Repair inability to load plans
+
+User reported that no plans could be loaded and requested local checkout first with lazy origin loading. Replaced eager workspace-wide fetching with offline default discovery plus a scoped origin request for the selected project. Project revisits restore separately retained checkout snapshots before retrying origin; errors keep those local records. Origin display results no longer overwrite the host's local analysis registry. Inspector snapshots therefore do not launch origin scans. Empty local Git roots can be selected to load remote-only plans.
+
+Initial verification: 38 Node tests pass; host tests pass; actual user-workspace local discovery returned 166 projects, 835 plans and 9,200 tasks in 1,227 ms. The real bridge returned 15,384,495 bytes and 166 mapped roots, within its existing 16 MiB output bound. Independent review caught and prompted fixes for a bridge binding collision and restoration of local snapshots on project revisit. Native UI automation is currently unavailable; installed-app repair will use verified bundle/host/API evidence and explicit visible-acceptance limits. Heavy local builds are held while the shared Mac's one-minute load exceeds 10.
