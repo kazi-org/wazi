@@ -31,7 +31,7 @@ export default function App(){
   const [overviewCollapsed,setOverviewCollapsed]=useState(false), [toolbarCollapsed,setToolbarCollapsed]=useState(false);
   const [view,setView]=useState('space'), [showLinks,setShowLinks]=useState(true), [resetKey,setResetKey]=useState(0), [focusKey,setFocusKey]=useState(0);
   const [loading,setLoading]=useState(true), [notice,setNotice]=useState(''), [workspaceOpen,setWorkspaceOpen]=useState(false), [workspaceExpanded,setWorkspaceExpanded]=useState(false), [inspectorExpanded,setInspectorExpanded]=useState(false), [taskList,setTaskList]=useState(false), [help,setHelp]=useState(false), [query,setQuery]=useState(''), [importing,setImporting]=useState(false), [importText,setImportText]=useState('');
-  const upload=useRef(null);const importCount=useRef(0);
+  const upload=useRef(null);const importCount=useRef(0);const checkoutProjects=useRef(new Map());
   const project=projects.find(p=>p.id===projectId)||sampleProject;
   const plan=project.plans.find(p=>p.id===planId)||project.plans[0];
   const tasks=useMemo(()=>aggregatePlanTasks(project.plans,planId),[project.plans,planId]);
@@ -56,18 +56,47 @@ export default function App(){
   const complete=tasks.filter(t=>t.status==='complete').length, blocked=tasks.filter(t=>t.status==='blocked').length;
   const progress=tasks.length?Math.round(complete/tasks.length*100):0;
   const statusText=status=>status==='complete'&&!project.sample?'Marked done':statusLabel[status];
-  const selectProject=(p)=>{setProjectId(p.id);setPlanId('all');setEpic('all');setSelected(null);setInspectorExpanded(false);setFilter('all');setResetKey(k=>k+1);setWorkspaceOpen(false);};
+  const selectProject=(p)=>{const checkout=checkoutProjects.current.get(p.id);if(checkout)setProjects(current=>current.map(item=>item.id===p.id?checkout:item));setOriginCycle(value=>value+1);setProjectId(p.id);setPlanId('all');setEpic('all');setSelected(null);setInspectorExpanded(false);setFilter('all');setResetKey(k=>k+1);setWorkspaceOpen(false);};
   const scanInFlight=useRef(false);
+  const [originCycle,setOriginCycle]=useState(0), [originLoading,setOriginLoading]=useState(false);
   const loadPlans=async()=>{
     if(scanInFlight.current)return;
     scanInFlight.current=true;
     setLoading(true);
     try {const response=await fetch('/api/plans',{cache:'no-store'});if(!response.ok)throw new Error('Could not read local plans');const data=await response.json();
       if(!Array.isArray(data.projects))throw new Error('Local plan reader is unavailable');
-      setProjects(current=>[sampleProject,...data.projects.map(p=>({...p,plans:p.plans.map(normalizePlan)})),...current.filter(p=>p.imported)]);
+      const local=data.projects.map(p=>({...p,plans:p.plans.map(normalizePlan)}));
+      checkoutProjects.current=new Map(local.map(p=>[p.id,p]));
+      setProjects(current=>[sampleProject,...local,...current.filter(p=>p.imported)]);
       setNotice(data.warnings?.join('\n')||'');
-    }catch{setProjects(current=>[sampleProject,...current.filter(p=>p.imported)]);setNotice('Plans could not be refreshed. Previous repository plans were removed. Refresh to retry, or import a plan.');}finally{scanInFlight.current=false;setLoading(false);}
+      setOriginCycle(value=>value+1);
+    }catch{setNotice('Could not reload local plans. Existing plans remain visible. Refresh to retry.');}finally{scanInFlight.current=false;setLoading(false);}
   };
+  useEffect(()=>{
+    if(!project.originEligible){setOriginLoading(false);return;}
+    const controller=new AbortController();
+    setOriginLoading(true);
+    const refresh=async()=>{
+      try{
+        const response=await fetch(`/api/plans?source=origin&projectId=${encodeURIComponent(project.id)}`,{cache:'no-store',signal:controller.signal});
+        if(!response.ok)throw new Error('Origin unavailable');
+        const data=await response.json();
+        if(!Array.isArray(data.projects))throw new Error('Origin response unavailable');
+        if(controller.signal.aborted)return;
+        const remote=data.projects.find(item=>item.id===project.id);
+        if(remote){
+          setProjects(current=>current.map(item=>item.id===remote.id?{...remote,plans:remote.plans.map(normalizePlan)}:item));
+        }else if(!data.warnings?.length){
+          // A successful origin with no plans must clear old local task records.
+          setProjects(current=>current.map(item=>item.id===project.id?{...item,plans:[],sourceType:'origin',sourceRevision:null}:item));
+        }
+        setNotice(data.warnings?.join('\n')||'');
+      }catch(error){if(error.name!=='AbortError'&&!controller.signal.aborted)setNotice('Origin is unavailable. Local checkout plans remain visible.');}
+      finally{if(!controller.signal.aborted)setOriginLoading(false);}
+    };
+    refresh();
+    return ()=>controller.abort();
+  },[project.id,project.originEligible,originCycle]);
   useEffect(()=>{
     loadPlans();
     const refresh=()=>{if(document.visibilityState==='visible')loadPlans();};
@@ -120,16 +149,16 @@ export default function App(){
     <DesktopChrome/>
     <aside role={workspaceOpen?'dialog':undefined} aria-modal={workspaceOpen||undefined} aria-label="Workspace" className={`sidebar ${workspaceExpanded?'expanded':'compact'} ${workspaceOpen?'open':''}`}>
       <a className="brand" href="#" aria-label="Wazi plan observatory" title="Wazi plan observatory" onClick={e=>e.preventDefault()}><img className="brand-logo" src={waziLogo} width="30" height="30" alt=""/><span>wazi<span className="brand-dot">.</span></span><small>PLAN OBSERVATORY</small></a>
-      <div className="workspace-heading"><span>YOUR WORKSPACE</span><div className="workspace-heading-actions"><button className="icon-btn sidebar-expand-toggle" aria-label={workspaceExpanded?'Collapse project sidebar':'Expand project sidebar'} title={workspaceExpanded?'Collapse project sidebar':'Expand project sidebar'} aria-expanded={workspaceExpanded} aria-controls="project-navigation" onClick={()=>setWorkspaceExpanded(value=>!value)}>{workspaceExpanded?<CaretLeft size={16}/>:<CaretRight size={16}/>}</button><button className="icon-btn" aria-label="Refresh projects from origin" title="Refresh projects from origin" onClick={loadPlans}><ArrowsClockwise size={15} className={loading?'spin':''}/></button></div></div>
+      <div className="workspace-heading"><span>YOUR WORKSPACE</span><div className="workspace-heading-actions"><button className="icon-btn sidebar-expand-toggle" aria-label={workspaceExpanded?'Collapse project sidebar':'Expand project sidebar'} title={workspaceExpanded?'Collapse project sidebar':'Expand project sidebar'} aria-expanded={workspaceExpanded} aria-controls="project-navigation" onClick={()=>setWorkspaceExpanded(value=>!value)}>{workspaceExpanded?<CaretLeft size={16}/>:<CaretRight size={16}/>}</button><button className="icon-btn" aria-label="Refresh plans" title="Refresh plans" onClick={loadPlans}><ArrowsClockwise size={15} className={loading?'spin':''}/></button></div></div>
       <button className={`project-row sample ${project.sample?'is-active':''}`} title="Wazi observatory · Example plan" aria-label="Wazi observatory, example plan" aria-current={project.sample?'page':undefined} onClick={()=>selectProject(sampleProject)}><Cube size={19} weight="duotone"/><span><strong>Wazi observatory</strong><small>Example plan</small></span><CaretRight size={13}/></button>
       <div className="local-heading"><span>LOCAL PROJECTS</span><span>{loading?'…':localProjects.length}</span></div>
       <div className="project-search"><MagnifyingGlass size={14}/><input aria-label="Filter projects" placeholder="Find a project" value={query} onChange={e=>setQuery(e.target.value)}/></div>
-      <nav className="project-list" id="project-navigation" aria-label="Project plans">{loading?<p className="muted-copy">Refreshing plans from origin…</p>:matches.length?matches.map(p=><button key={p.id} title={`${p.name} · ${p.plans.length} ${p.plans.length===1?'plan':'plans'}`} aria-label={`${p.name}, ${p.plans.length} ${p.plans.length===1?'plan':'plans'}, ${p.plans.reduce((n,p)=>n+p.tasks.length,0)} tasks`} aria-current={p.id===project.id?'page':undefined} className={`project-row ${p.id===project.id?'is-active':''}`} onClick={()=>selectProject(p)}><FolderSimple size={17}/><span><strong>{p.name}</strong><small>{p.plans.length} {p.plans.length===1?'plan':'plans'} · {p.plans.reduce((n,p)=>n+p.tasks.length,0)} tasks</small></span></button>):<p className="muted-copy">{query?'No matching projects.':'No local plans found. Import one to begin.'}</p>}</nav>
+      <nav className="project-list" id="project-navigation" aria-label="Project plans">{loading?<p className="muted-copy">Reading local checkout plans…</p>:matches.length?matches.map(p=><button key={p.id} title={`${p.name} · ${p.plans.length} ${p.plans.length===1?'plan':'plans'}`} aria-label={`${p.name}, ${p.plans.length} ${p.plans.length===1?'plan':'plans'}, ${p.plans.reduce((n,p)=>n+p.tasks.length,0)} tasks`} aria-current={p.id===project.id?'page':undefined} className={`project-row ${p.id===project.id?'is-active':''}`} onClick={()=>selectProject(p)}><FolderSimple size={17}/><span><strong>{p.name}</strong><small>{p.plans.length} {p.plans.length===1?'plan':'plans'} · {p.plans.reduce((n,p)=>n+p.tasks.length,0)} tasks</small></span></button>):<p className="muted-copy">{query?'No matching projects.':'No local plans found. Import one to begin.'}</p>}</nav>
       <div className="sidebar-bottom"><button className="import-button" title="Import a plan" aria-label="Import a plan" onClick={()=>{setWorkspaceOpen(false);setImporting(true);}}><UploadSimple size={17}/><span>Import a plan</span><Plus size={13}/></button><div className="local-note"><span className="live-dot"/>Local & read only</div><button className="help-button" title="Navigation guide" aria-label="Open navigation guide" onClick={()=>{setWorkspaceOpen(false);setHelp(true);}}><Keyboard size={16}/><span className="help-label">Navigation guide</span><span>?</span></button></div>
     </aside>
     {workspaceOpen&&<button className="mobile-scrim" tabIndex={-1} aria-label="Close workspace" onClick={()=>setWorkspaceOpen(false)}/>}
     <main className={`main ${task?'has-inspector':''}`} inert={workspaceOpen}>
-      <header className="topbar"><button className="icon-btn mobile-menu" aria-label="Open workspace" onClick={()=>setWorkspaceOpen(true)}><List size={22}/></button><div className="breadcrumb"><FolderSimple size={15}/><span>{project.name}</span><CaretRight size={12}/><strong>{planId==='all'?'All plans':plan?.title}</strong></div><div className="topbar-actions"><span title={project.sourceType==='origin'?`Origin default branch · ${project.sourceRevision} · fetched ${project.fetchedAt}`:undefined} className={`source-badge ${project.sample?'example':''} ${project.portable?'portable':''}`}><span className="live-dot"/>{project.sample?'EXAMPLE PLAN':project.portable?'PORTABLE REPORT · UNVERIFIED':project.imported?'IMPORTED PLAN':project.sourceType==='origin'?`ORIGIN · ${project.sourceRevision.slice(0,8)}`:'LOCAL FILE'}</span><button className="icon-btn inspector-toggle-inline" aria-label={inspectorExpanded?'Collapse task inspector':'Expand task inspector'} title={inspectorExpanded?'Collapse task inspector':'Expand task inspector'} aria-expanded={Boolean(task&&inspectorExpanded)} aria-controls="task-inspector" disabled={!task} onClick={()=>setInspectorExpanded(value=>!value)}><CaretLeft size={17}/></button><button className="icon-btn" aria-label="Show navigation guide" onClick={()=>{setWorkspaceOpen(false);setHelp(true);}}><Info size={18}/></button></div></header>
+      <header className="topbar"><button className="icon-btn mobile-menu" aria-label="Open workspace" onClick={()=>setWorkspaceOpen(true)}><List size={22}/></button><div className="breadcrumb"><FolderSimple size={15}/><span>{project.name}</span><CaretRight size={12}/><strong>{planId==='all'?'All plans':plan?.title}</strong></div><div className="topbar-actions"><span title={project.sourceType==='origin'?`Origin default branch · ${project.sourceRevision} · fetched ${project.fetchedAt}`:undefined} className={`source-badge ${project.sample?'example':''} ${project.portable?'portable':''}`}><span className="live-dot"/>{originLoading?'LOCAL CHECKOUT · CHECKING ORIGIN':project.sample?'EXAMPLE PLAN':project.portable?'PORTABLE REPORT · UNVERIFIED':project.imported?'IMPORTED PLAN':project.sourceType==='origin'?`ORIGIN · ${(project.sourceRevision||'no plans').slice(0,8)}`:project.originEligible?'LOCAL CHECKOUT':'LOCAL FILE'}</span><button className="icon-btn inspector-toggle-inline" aria-label={inspectorExpanded?'Collapse task inspector':'Expand task inspector'} title={inspectorExpanded?'Collapse task inspector':'Expand task inspector'} aria-expanded={Boolean(task&&inspectorExpanded)} aria-controls="task-inspector" disabled={!task} onClick={()=>setInspectorExpanded(value=>!value)}><CaretLeft size={17}/></button><button className="icon-btn" aria-label="Show navigation guide" onClick={()=>{setWorkspaceOpen(false);setHelp(true);}}><Info size={18}/></button></div></header>
       {!overviewCollapsed&&<section className="overview" id="plan-overview"><div><div className="eyebrow"><span>WORK IN PERSPECTIVE</span><span className="tiny-line"/></div><h1>The bigger picture<span>.</span></h1><p>Every step connected. Your next move, clear.</p></div><div className="plan-stats"><div><strong>{tasks.length}</strong><span>total tasks</span></div><div><strong>{complete}<small> / {tasks.length}</small></strong><span>{project.sample?'complete':'marked done'}</span></div><div><strong className="blocked-count">{blocked.toString().padStart(2,'0')}</strong><span>blocked</span></div></div><button className="icon-btn collapse-top-row" aria-label="Collapse overview row" title="Collapse overview row" aria-expanded="true" onClick={()=>setOverviewCollapsed(true)}><CaretUp size={16}/></button></section>}
       {(overviewCollapsed||toolbarCollapsed)&&<div className="collapsed-top-rows" role="group" aria-label="Hidden sections">
         {overviewCollapsed&&<button className="restore-top-row" aria-expanded="false" onClick={()=>setOverviewCollapsed(false)}><CaretDown size={14}/>Show overview</button>}

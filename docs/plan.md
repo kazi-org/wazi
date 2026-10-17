@@ -229,3 +229,7 @@ Collapse-layout correction delivered locally: original header alignment restored
 ## Origin plan freshness (2026-10-16)
 
 Implemented locally: fetch origin's default-branch HEAD and display commit-pinned plans independently of local branch/files; show commit provenance; refresh while visible and on return; omit unavailable origins without stale/local fallback. Standalone files/imports remain explicit local inputs. Source and local verification only; not merged or installed as a native app. Verification details are in docs/devlog.md.
+
+## Local-first loading repair (2026-10-17)
+
+Supersedes the eager origin-only behavior above: load local checkout plans without network access; lazily fetch only the selected project's origin; preserve checkout data on origin failure and on project revisit. Keep local analysis independent of origin display snapshots. Delivery and verification recorded in docs/devlog.md.

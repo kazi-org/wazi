@@ -28,7 +28,7 @@ For agent-run tests set `TMPDIR` to an owned external-SSD artifact directory. Do
 
 ## Origin access
 
-Repository plan discovery now requires Git on the host PATH and noninteractive access to each configured origin. Every refresh fetches origin's advertised default-branch HEAD; the displayed plans use that pinned commit. Local main and working-tree plans do not select repository results. Failed origins are omitted and warned about, without cached/local fallback. The UI refreshes at startup, manually, on focus/visibility return and every minute while visible. Standalone non-Git files and explicit imports remain local inputs. Local code analysis still requires matching plan bytes.
+Local discovery reads checkout plans without network access or Git. Selecting a repository starts an origin refresh scoped to that project, using Git on the host PATH and noninteractive origin credentials. On failure the checkout stays visible. Each project retains its checkout snapshot independently of origin display results. Empty Git roots can be selected to load remote-only plans. Global/manual/focus refresh loads local data first, then only the selected origin. Local code analysis stays offline and requires matching plan bytes.
 
 ## Expected data behavior
 

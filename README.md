@@ -9,7 +9,7 @@ npm install
 npm run dev -- --port 4193 --strictPort
 ```
 
-Open http://127.0.0.1:4193/. The development server fetches repository plans from origin’s default branch. The static build contains the sample workflow and supports Markdown import; it does not include your local project data.
+Open http://127.0.0.1:4193/. The development server loads local checkout plans first, then lazily checks the selected repository’s origin. The static build contains the sample workflow and supports Markdown import; it does not include your local project data.
 
 Select a local Three.js checkout with `THREE_JS_SOURCE=/path/to/three.js` (fallback: `~/Code/three.js`), using its existing `build/three.module.js` and `examples/jsm/controls/OrbitControls.js`. This checkout is consumed without modification. Fonts and [Phosphor](https://phosphoricons.com/) icons are installed locally; the browser makes no external asset requests.
 
@@ -26,7 +26,7 @@ Select a local Three.js checkout with `THREE_JS_SOURCE=/path/to/three.js` (fallb
 
 The server scans repository roots under `~/Code` for `plan.md`, `docs/plan.md` and `docs/plans/*.md`. Override the root with `WAZI_PLAN_ROOT=/path/to/workspace`. Discovery stops at Git roots, skips common build/dependency/worktree directories and bounds file sizes, depth and counts. Repositories are sorted. A visible notice reports scan limits or read failures; unsupported metadata is not fabricated.
 
-Repository plans come from a fresh fetch of origin's advertised default-branch HEAD, independent of local main, feature branches and dirty files. Git and noninteractive origin credentials must be available to the host. The UI shows the fetched commit and refreshes on startup, focus, visibility return and every minute while visible. Failed origins are omitted with a warning; cached/local repository plans are never substituted. Git objects are fetched and temporary refs removed without changing source files. Standalone non-Git plan directories and explicit imports remain local inputs. Code analysis requires matching local plan bytes.
+Local checkout plans load first without network access. Selecting a repository lazily fetches only its origin's advertised default-branch HEAD and updates the displayed plans when successful. Origin failures keep the local checkout visible; revisiting a project restores its local snapshot before checking origin again. Source badges distinguish local and origin records. Git and noninteractive credentials are needed only for origin refresh. Standalone files/imports remain local. Local code analysis requires matching plan bytes; origin display snapshots do not replace local analysis state.
 
 Tasks support checkboxes (`[ ]`, `[x]`, `[~]`, `[-]`), stable IDs (`T1.1`, `S1.2.1`), `Owner:`, `stage:`, `status:`, `acc:`, `deps:` and `blocked-by:`. An incomplete known dependency derives a blocked status; unresolved dependencies produce warnings. Checkboxes remain the source for completed status. Import does not rewrite source plans.
 

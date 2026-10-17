@@ -486,7 +486,7 @@ func TestHostRequiresLoopbackAndSessionCapabilityForWrites(t *testing.T) {
 	}
 }
 
-func TestOriginPlanDiscoveryRejectsMismatchedLocalAnalysis(t *testing.T) {
+func TestOriginDisplayRefreshPreservesLocalAnalysis(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node unavailable")
 	}
@@ -522,15 +522,40 @@ func TestOriginPlanDiscoveryRejectsMismatchedLocalAnalysis(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc := New(root, t.TempDir(), "node", bridge)
-	scan, err := svc.Discover(context.Background())
+	local, err := svc.Discover(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, err := NewHost(svc, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing := httptest.NewRecorder()
+	host.Handler().ServeHTTP(missing, httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8891/api/plans?source=origin", nil))
+	if missing.Code != http.StatusBadRequest {
+		t.Fatalf("unscoped origin request status: %d", missing.Code)
+	}
+	remote := httptest.NewRecorder()
+	host.Handler().ServeHTTP(remote, httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8891/api/plans?source=origin&projectId="+local.Projects[0].ID, nil))
+	if remote.Code != http.StatusOK || !strings.Contains(remote.Body.String(), "Latest origin task") {
+		t.Fatalf("origin HTTP response: %d", remote.Code)
+	}
+	scan, err := svc.DiscoverOrigin(context.Background(), local.Projects[0].ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(scan.Projects) != 1 || scan.Projects[0].Plans[0].Tasks[0].Title != "Latest origin task" {
 		t.Fatalf("remote scan: %+v", scan)
 	}
-	if _, err := svc.Snapshot(context.Background(), scan.Projects[0].ID); err == nil {
-		t.Fatal("accepted local code analysis against a different plan")
+	snapshot, err := svc.Snapshot(context.Background(), scan.Projects[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.PlanDigests["plan.md"] == scan.Projects[0].Plans[0].SourceDigest {
+		t.Fatal("local analysis borrowed remote plan digest")
+	}
+	if snapshot.PlanDigests["plan.md"] != local.Projects[0].Plans[0].SourceDigest {
+		t.Fatal("local snapshot changed after origin display refresh")
 	}
 	if err := os.WriteFile(filepath.Join(repo, "plan.md"), latest, 0600); err != nil {
 		t.Fatal(err)
